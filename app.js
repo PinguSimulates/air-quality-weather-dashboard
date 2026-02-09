@@ -10,6 +10,34 @@ let cached = { stationId: null, days: null, no2: null };
 
 let selectedStation = null;
 
+// 00 HELPERS FOR STATS CALCULATIONS
+
+function pearsonCorr(xs, ys) {
+  const n = Math.min(xs.length, ys.length);
+  if (n < 2) return null;
+
+  let sx = 0, sy = 0;
+  for (let i = 0; i < n; i++) { sx += xs[i]; sy += ys[i]; }
+  const mx = sx / n, my = sy / n;
+
+  let num = 0, dx = 0, dy = 0;
+  for (let i = 0; i < n; i++) {
+    const a = xs[i] - mx;
+    const b = ys[i] - my;
+    num += a * b;
+    dx += a * a;
+    dy += b * b;
+  }
+  const den = Math.sqrt(dx * dy);
+  if (!Number.isFinite(den) || den === 0) return null;
+  return num / den;
+}
+
+function setKpi(id, value) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = value;
+}
+
 
 // 01 CHART RENDERING FUNCTION 
 
@@ -137,7 +165,8 @@ function renderNo2WindScatter(no2Rows, windHourly) {
 
       return {
         x: wind, // wind speed
-        y: no2   // NO2 concentration
+        y: no2,  // NO2 concentration
+        t: r.timestamp_measured
       };
     })
     .filter(Boolean);
@@ -165,6 +194,22 @@ function renderNo2WindScatter(no2Rows, windHourly) {
     options: {
       responsive: true,
       parsing: false,
+        plugins: {
+        tooltip: {
+        callbacks: {
+            title: (items) => {
+            const p = items[0].raw;
+            // show hour (YYYY-MM-DD HH:MM)
+            return p.t ? p.t.replace("T", " ").slice(0, 16) : "Hour";
+            },
+            label: (item) => {
+            const p = item.raw;
+            return `Wind: ${p.x.toFixed(1)} km/h, NO₂: ${p.y.toFixed(1)} µg/m³`;
+            }
+        }
+        }
+    },
+
       scales: {
         x: {
           title: {
@@ -252,10 +297,36 @@ function renderDailyNo2WindScatter(no2Rows, windHourly) {
   // Sort by wind (optional, just for sanity)
   points.sort((a, b) => a.x - b.x);
 
+        // ✅ Define thresholds BEFORE using them
+    const WHO_DAILY_NO2 = 25;
+    const WHO_ANNUAL_NO2 = 10;
+
+  // --- Insights ---
+    const daysCount = points.length;
+    const above25 = points.filter(p => p.y > WHO_DAILY_NO2).length;
+    const pctAbove25 = daysCount ? (100 * above25 / daysCount) : 0;
+
+    const xsCorr = points.map(p => p.x);
+    const ysCorr = points.map(p => p.y);
+    const corr = pearsonCorr(xsCorr, ysCorr);
+
+    setKpi("kpiDays", `${daysCount}`);
+    setKpi("kpiAbove25", `${pctAbove25.toFixed(0)}%`);
+    setKpi("kpiCorr", corr === null ? "—" : corr.toFixed(2));
+
+  const ok = points.filter(p => p.y <= WHO_ANNUAL_NO2);
+  const borderline = points.filter(p => p.y > WHO_ANNUAL_NO2 && p.y <= WHO_DAILY_NO2);
+  const high = points.filter(p => p.y > WHO_DAILY_NO2);
+
+
   console.log("Daily scatter points:", points.length);
   console.log("Daily sample:", points.slice(0, 5));
 
   if (points.length === 0) {
+    setKpi("kpiDays", "0");
+    setKpi("kpiAbove25", "—");
+    setKpi("kpiCorr", "—");
+
     console.warn("No daily overlap between NO2 and wind.");
     return;
   }
@@ -269,16 +340,47 @@ function renderDailyNo2WindScatter(no2Rows, windHourly) {
   dailyScatterChart = new Chart(ctx, {
     type: "scatter",
     data: {
-      datasets: [{
-        label: "Daily mean NO2 vs daily mean wind",
-        data: points.map(p => ({ x: p.x, y: p.y })), // chart only needs x/y
+    datasets: [
+    {
+        label: "Good (≤ 10 µg/m³)",
+        data: ok,
         pointRadius: 4,
-        pointHoverRadius: 6
-      }]
+        backgroundColor: "rgba(34, 197, 94, 0.7)",  // green
+        borderColor: "rgba(34, 197, 94, 1)"
+    },
+    {
+        label: "Elevated (10–25 µg/m³)",
+        data: borderline,
+        pointRadius: 4,
+        backgroundColor: "rgba(234, 179, 8, 0.7)",  // amber
+        borderColor: "rgba(234, 179, 8, 1)"
+    },
+    {
+        label: "High (> 25 µg/m³)",
+        data: high,
+        pointRadius: 5,
+        backgroundColor: "rgba(239, 68, 68, 0.75)", // red
+        borderColor: "rgba(239, 68, 68, 1)"
+    }
+    ]
+
+
     },
     options: {
       responsive: true,
       parsing: false,
+      plugins: {
+        tooltip: {
+        callbacks: {
+            title: (items) => items[0].raw.day,
+            label: (item) => {
+            const p = item.raw;
+            return `Wind: ${p.x.toFixed(1)} km/h, NO₂: ${p.y.toFixed(1)} µg/m³`;
+            }
+        }
+        }
+      },
+
       scales: {
         x: {
           title: { display: true, text: "Daily mean wind speed (km/h)" },
@@ -294,7 +396,6 @@ function renderDailyNo2WindScatter(no2Rows, windHourly) {
     }
   });
 }
-
 
 
 // 02 EXTRACING NO2 DATA

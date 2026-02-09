@@ -6,37 +6,67 @@
         <title>Air Quality Dashboard</title>
         <link rel="stylesheet" href = "styles.css">
     </head>
+
+
     <body>
-    <h1>NO<sub>2</sub> in Utrecht (Exploratory)</h1>
 
-    <section id="controls">
-        <label>
-        Days:
-        <select id="days">
-            <option value="30">30</option>
-            <option value="90" selected>90</option>
-            <option value="180">180</option>
-        </select>
-        </label>
-        <button id="loadBtn">Load data</button>
-    </section>
+    <div class="container">
+        <h1>NO<sub>2</sub> in Utrecht (Exploratory)</h1>
 
-    <pre id="status">Ready.</pre>
+        <p class="subtitle">
+        Live NO₂ (Luchtmeetnet) + wind (Open-Meteo). Explore dispersion patterns by hour and by day.
+        </p>
 
-    <canvas id="chart" width="900" height="420"></canvas>
+        <section id="controls">
+            <label>
+            Days:
+            <select id="days">
+                <option value="30">30</option>
+                <option value="90" selected>90</option>
+                <option value="180">180</option>
+            </select>
+            </label>
+            <button id="loadBtn">Load data</button>
+        </section>
 
-    <h2>NO2 vs Wind Speed (Hourly)</h2>
-    <canvas id="scatterChart"></canvas>
+        <pre id="status">Ready.</pre>
 
-    <h2>NO2 vs Wind Speed (Daily Averages)</h2>
-    <canvas id="dailyScatterChart"></canvas>
+        <h2 class="insightsTitle">Key insights (daily averages)</h2>
 
+        <section id="insights" class="insights">
+            <div class="insight">
+                <div class="kpi" id="kpiDays">—</div>
+                <div class="kpiLabel">Days analysed</div>
+            </div>
+            <div class="insight">
+                <div class="kpi" id="kpiAbove25">—</div>
+                <div class="kpiLabel">% days NO₂ > 25</div>
+            </div>
+            <div class="insight">
+                <div class="kpi" id="kpiCorr">—</div>
+                <div class="kpiLabel">Correlation (wind vs NO₂)</div>
+            </div>
+        </section>
+
+        <section class="chart-block chart-tall">
+            <canvas id="chart"></canvas>
+        </section>
+
+        <section class="chart-block">
+            <h2>NO₂ vs Wind Speed (Hourly)</h2>
+            <canvas id="scatterChart"></canvas>
+        </section>
+
+        <section class="chart-block">
+            <h2>NO₂ vs Wind Speed (Daily Averages)</h2>
+            <canvas id="dailyScatterChart"></canvas>
+        </section>
+    </div>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/luxon@3"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@1"></script>
     <script src="app.js"></script>
-
     </body>
 
 </html>
