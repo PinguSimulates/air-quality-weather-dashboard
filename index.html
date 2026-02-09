@@ -1,11 +1,35 @@
 <!DOCTYPE html>
 <html>
     <head>
+        <meta charset="UTF-8" />
+
         <title>Air Quality Dashboard</title>
         <link rel="stylesheet" href = "styles.css">
     </head>
     <body>
-        <h1> NO2 in Utrecht</h1>
-        <script src="app.js"></script>
+    <h1>NO<sub>2</sub> in Utrecht (Exploratory)</h1>
+
+    <section id="controls">
+        <label>
+        Days:
+        <select id="days">
+            <option value="30">30</option>
+            <option value="90" selected>90</option>
+            <option value="180">180</option>
+        </select>
+        </label>
+        <button id="loadBtn">Load data</button>
+    </section>
+
+    <pre id="status">Ready.</pre>
+
+    <canvas id="chart" width="900" height="420"></canvas>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/luxon@3"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@1"></script>
+    <script src="app.js"></script>
+
     </body>
+
 </html>
