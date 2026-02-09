@@ -12,71 +12,114 @@ function cacheKey(stationId, days) {
   return `${stationId}|${days}`;
 }
 
+
+// 01 CHART RENDERING FUNCTION 
+
 let chart;
 
-function renderNo2Chart(no2Rows) {
-  // Build {x, y} points so Chart.js knows what to plot
-  const points = no2Rows
+function buildWindMap(hourly) {
+  const map = new Map();
+  if (!hourly?.time) return map;
+
+  for (let i = 0; i < hourly.time.length; i++) {
+    // hourly.time is like "2025-11-11T00:00"
+    // Store as-is, and also store a "Z" version for convenience.
+    const t = hourly.time[i];
+    map.set(t, hourly.wind_speed_10m[i]);
+    map.set(t + "Z", hourly.wind_speed_10m[i]);
+  }
+  return map;
+}
+
+// windHourly is optional (pass null/undefined for NO2-only)
+function renderNo2Chart(no2Rows, windHourly) {
+  const no2Points = no2Rows
     .map(r => ({
-      x: new Date(r.timestamp_measured),   // time
-      y: Number(r.value)                   // NO2 value
+      x: new Date(r.timestamp_measured),
+      y: Number(r.value)
     }))
     .filter(p => Number.isFinite(p.x.getTime()) && Number.isFinite(p.y));
 
-    console.log("points:", points.length);
-    console.log("first:", points[0], "last:", points[points.length - 1]);
+  console.log("NO2 points:", no2Points.length);
+  console.log("NO2 first:", no2Points[0], "last:", no2Points[no2Points.length - 1]);
 
-    const xMin = points[0].x;
-    const xMax = points[points.length - 1].x;
+  const xMin = no2Points[0]?.x;
+  const xMax = no2Points[no2Points.length - 1]?.x;
 
+  const datasets = [{
+    label: "NO2 (µg/m³)",
+    data: no2Points,
+    yAxisID: "y",
+    pointRadius: 0,
+    borderWidth: 1
+  }];
+
+  // If wind data provided, add a second dataset and axis
+  if (windHourly?.time?.length) {
+    const windMap = buildWindMap(windHourly);
+
+    const windPoints = no2Rows
+      .map(r => {
+        // NO2 timestamps are like "2026-02-09T16:00:00+00:00"
+        // Normalize to hour key like "2026-02-09T16:00"
+        const hourKey = r.timestamp_measured.slice(0, 16); // YYYY-MM-DDTHH:MM
+        const ws = windMap.get(hourKey) ?? null;
+
+        return { x: new Date(r.timestamp_measured), y: ws };
+      })
+      .filter(p => Number.isFinite(p.x.getTime()) && Number.isFinite(p.y));
+
+    console.log("Wind points:", windPoints.length);
+    datasets.push({
+      label: "Wind speed 10m",
+      data: windPoints,
+      yAxisID: "y1",
+      pointRadius: 0,
+      borderWidth: 1
+    });
+  }
 
   const ctx = document.getElementById("chart").getContext("2d");
   if (chart) chart.destroy();
 
   chart = new Chart(ctx, {
     type: "line",
-    data: {
-      datasets: [{
-        label: "NO2 (µg/m³)",
-        data: points,
-        pointRadius: 0,     // faster + cleaner for lots of points
-        borderWidth: 1
-      }]
-    },
+    data: { datasets },
     options: {
       responsive: true,
       parsing: false,
       plugins: {
-        decimation: {
-            enabled: true,
-            algorithm: "min-max"
-        }
-        },
-
+        decimation: { enabled: true, algorithm: "min-max" }
+      },
       scales: {
         x: {
           type: "time",
           min: xMin,
           max: xMax,
           time: { unit: "week" },
-          ticks: {maxTicksLimit:8 }
+          ticks: { maxTicksLimit: 8 }
         },
         y: {
-          beginAtZero: true
-        }
+          beginAtZero: true,
+          position: "left",
+          title: { display: true, text: "NO2 (µg/m³)" }
+        },
+        // Only show y1 if wind dataset exists
+        y1: windHourly?.time?.length ? {
+          beginAtZero: true,
+          position: "right",
+          grid: { drawOnChartArea: false },
+          title: { display: true, text: "Wind speed 10m" }
+        } : undefined
       }
     }
   });
 }
 
-/*
-loadBtn.addEventListener("click", async () => {
-  setStatus(`Loading last ${daysEl.value} days...`);
-  console.log("Button clicked");
-});*/
+
+// 02 EXTRACING NO2 DATA
 
 const BASE = "https://api.luchtmeetnet.nl/open_api";
-
 
 async function fetchJson(url) {
   const res = await fetch(url);
@@ -150,8 +193,6 @@ async function getNo2Measurements(stationId, days, maxPages = 200) {
   return all;
 }
 
-
-
 // Fetch all stations by paging until empty
 async function getAllStations(maxPages = 80) {
   const all = [];
@@ -195,6 +236,39 @@ async function stationHasNo2(stationId) {
     return false;
   }
 }
+
+// 03 Fetching wind data 
+
+async function fetchWindHourly(days) {
+  const lat = 52.0907;
+  const lon = 5.1214;
+
+  const end = new Date();
+  const start = new Date();
+  start.setDate(end.getDate() - Number(days));
+
+  const fmt = (d) => d.toISOString().slice(0, 10);
+
+  const url =
+    `https://archive-api.open-meteo.com/v1/archive` +
+    `?latitude=${lat}&longitude=${lon}` +
+    `&start_date=${fmt(start)}&end_date=${fmt(end)}` +
+    `&hourly=wind_speed_10m,wind_direction_10m` +
+    `&timezone=UTC`;
+
+  const json = await fetchJson(url);
+  return json.hourly; // { time: [...], wind_speed_10m: [...], wind_direction_10m: [...] }
+}
+
+function buildWindMap(hourly) {
+  const map = new Map();
+  for (let i = 0; i < hourly.time.length; i++) {
+    map.set(hourly.time[i], hourly.wind_speed_10m[i]);
+  }
+  return map;
+}
+
+// 04 EVENT LISTENER, WHEN PRESSING LOAD DATA ITS TRIGGERED
 
 loadBtn.addEventListener("click", async () => {
   try {
@@ -249,13 +323,21 @@ loadBtn.addEventListener("click", async () => {
 
     const no2 = await getNo2Measurements(stationId, days);
 
+    const wind = await fetchWindHourly(days);
+    console.log("wind sample:", wind.time[0], wind.wind_speed_10m[0], wind.wind_direction_10m[0]);
+
     // ✅ Save to cache AFTER fetching
     cached = { stationId, days, no2 };
 
     console.log("Chosen station:", chosen);
     console.log("NO2 rows sample:", no2.slice(0, 5));
 
-    renderNo2Chart(no2);
+
+    const windHourly = await fetchWindHourly(days);
+    renderNo2Chart(no2, windHourly);
+
+
+    //renderNo2Chart(no2);
     setStatus(`Loaded ${no2.length} NO2 records from ${stationId}.`);
 
     console.log("Chosen station:", chosen);
