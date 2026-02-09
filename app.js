@@ -146,7 +146,6 @@ let scatterChart;
 let dailyScatterChart;
 
 
-
 function renderNo2WindScatter(no2Rows, windHourly) {
   // Build wind lookup by hour
   const windMap = new Map();
@@ -195,6 +194,7 @@ function renderNo2WindScatter(no2Rows, windHourly) {
       responsive: true,
       parsing: false,
         plugins: {
+        legend: {labels: {boxWidth:14, font: {size:12}}},
         tooltip: {
         callbacks: {
             title: (items) => {
@@ -370,6 +370,7 @@ function renderDailyNo2WindScatter(no2Rows, windHourly) {
       responsive: true,
       parsing: false,
       plugins: {
+        legend: {labels: {boxWidth:14, font: {size:12}}},
         tooltip: {
         callbacks: {
             title: (items) => items[0].raw.day,

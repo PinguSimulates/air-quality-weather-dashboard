@@ -4,6 +4,17 @@ Interactive dashboard exploring how local wind conditions relate to roadside NO�
 
 **Why this matters:** NO₂ is a key traffic-related pollutant. Wind affects dispersion, so overlaying NO₂ with wind speed helps reveal when/why higher concentrations occur.
 
+## Why this project exists
+
+This dashboard explores how **wind-driven dispersion** affects roadside NO₂ concentrations in Utrecht.
+
+Rather than static reporting, it focuses on **pattern discovery**:
+- When does wind meaningfully reduce NO₂?
+- How noisy is the hourly signal vs daily averages?
+- How often do levels exceed health-based guidelines?
+
+The goal is not prediction, but **understanding**.
+
 ## What it does
 - Fetches **live / near-real-time** NO₂ measurements from the Dutch air-quality network (Luchtmeetnet)
 - Fetches **hourly wind speed** from Open-Meteo for the Utrecht area
@@ -33,3 +44,4 @@ Interactive dashboard exploring how local wind conditions relate to roadside NO�
 - Add wind direction (source vs dispersion)
 - Add day-of-week / rush-hour stratification
 - Add precipitation / temperature overlays
+- Maybe clean up/better organise the code if planning to iterate more and expand capability
