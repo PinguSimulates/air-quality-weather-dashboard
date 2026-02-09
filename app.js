@@ -8,9 +8,7 @@ function setStatus(msg) {
 
 let cached = { stationId: null, days: null, no2: null };
 
-function cacheKey(stationId, days) {
-  return `${stationId}|${days}`;
-}
+let selectedStation = null;
 
 
 // 01 CHART RENDERING FUNCTION 
@@ -117,6 +115,9 @@ function renderNo2Chart(no2Rows, windHourly) {
 }
 
 let scatterChart;
+let dailyScatterChart;
+
+
 
 function renderNo2WindScatter(no2Rows, windHourly) {
   // Build wind lookup by hour
@@ -185,6 +186,115 @@ function renderNo2WindScatter(no2Rows, windHourly) {
     }
   });
 }
+
+function toDayKey(ts) {
+  // ts can be "2026-02-09T16:00:00+00:00" or "2026-02-09T16:00"
+  return String(ts).slice(0, 10); // YYYY-MM-DD
+}
+
+function dailyMeanFromNo2(no2Rows) {
+  const acc = new Map(); // day -> {sum, n}
+
+  for (const r of no2Rows) {
+    const day = toDayKey(r.timestamp_measured);
+    const v = Number(r.value);
+    if (!Number.isFinite(v)) continue;
+
+    const cur = acc.get(day) ?? { sum: 0, n: 0 };
+    cur.sum += v;
+    cur.n += 1;
+    acc.set(day, cur);
+  }
+
+  // day -> mean
+  const means = new Map();
+  for (const [day, { sum, n }] of acc.entries()) {
+    if (n > 0) means.set(day, sum / n);
+  }
+  return means;
+}
+
+function dailyMeanFromWind(windHourly) {
+  const acc = new Map(); // day -> {sum, n}
+
+  for (let i = 0; i < windHourly.time.length; i++) {
+    const t = windHourly.time[i]; // "YYYY-MM-DDTHH:MM"
+    const day = toDayKey(t);
+    const v = Number(windHourly.wind_speed_10m[i]);
+    if (!Number.isFinite(v)) continue;
+
+    const cur = acc.get(day) ?? { sum: 0, n: 0 };
+    cur.sum += v;
+    cur.n += 1;
+    acc.set(day, cur);
+  }
+
+  const means = new Map();
+  for (const [day, { sum, n }] of acc.entries()) {
+    if (n > 0) means.set(day, sum / n);
+  }
+  return means;
+}
+
+function renderDailyNo2WindScatter(no2Rows, windHourly) {
+  const no2Daily = dailyMeanFromNo2(no2Rows);      // day -> mean NO2
+  const windDaily = dailyMeanFromWind(windHourly); // day -> mean wind
+
+  // Join by day
+  const points = [];
+  for (const [day, no2Mean] of no2Daily.entries()) {
+    const windMean = windDaily.get(day);
+    if (!Number.isFinite(windMean) || !Number.isFinite(no2Mean)) continue;
+
+    points.push({ x: windMean, y: no2Mean, day });
+  }
+
+  // Sort by wind (optional, just for sanity)
+  points.sort((a, b) => a.x - b.x);
+
+  console.log("Daily scatter points:", points.length);
+  console.log("Daily sample:", points.slice(0, 5));
+
+  if (points.length === 0) {
+    console.warn("No daily overlap between NO2 and wind.");
+    return;
+  }
+
+  const xs = points.map(p => p.x);
+  const xMax = Math.ceil(Math.max(...xs) / 5) * 5;
+
+  const ctx = document.getElementById("dailyScatterChart").getContext("2d");
+  if (dailyScatterChart) dailyScatterChart.destroy();
+
+  dailyScatterChart = new Chart(ctx, {
+    type: "scatter",
+    data: {
+      datasets: [{
+        label: "Daily mean NO2 vs daily mean wind",
+        data: points.map(p => ({ x: p.x, y: p.y })), // chart only needs x/y
+        pointRadius: 4,
+        pointHoverRadius: 6
+      }]
+    },
+    options: {
+      responsive: true,
+      parsing: false,
+      scales: {
+        x: {
+          title: { display: true, text: "Daily mean wind speed (km/h)" },
+          beginAtZero: true,
+          max: xMax,
+          ticks: { stepSize: 5 }
+        },
+        y: {
+          title: { display: true, text: "Daily mean NO2 (µg/m³)" },
+          beginAtZero: true
+        }
+      }
+    }
+  });
+}
+
 
 
 // 02 EXTRACING NO2 DATA
@@ -331,13 +441,13 @@ async function fetchWindHourly(days) {
   return json.hourly; // { time: [...], wind_speed_10m: [...], wind_direction_10m: [...] }
 }
 
-function buildWindMap(hourly) {
+/*function buildWindMap(hourly) {
   const map = new Map();
   for (let i = 0; i < hourly.time.length; i++) {
     map.set(hourly.time[i], hourly.wind_speed_10m[i]);
   }
   return map;
-}
+}*/
 
 // 04 EVENT LISTENER, WHEN PRESSING LOAD DATA ITS TRIGGERED
 
@@ -345,6 +455,9 @@ loadBtn.addEventListener("click", async () => {
   try {
     const days = daysEl.value;
 
+    let chosen = selectedStation;
+
+    if (!chosen) {
     setStatus("Fetching all stations (paged)...");
     const stations = await getAllStations();
     console.log("Total stations:", stations.length);
@@ -354,40 +467,45 @@ loadBtn.addEventListener("click", async () => {
     const candidates = filterStationsByKeywords(stations, keywords);
 
     console.log("Candidates:", candidates.map(s => ({
-      id: getStationId(s),
-      label: getStationLabel(s),
+        id: getStationId(s),
+        label: getStationLabel(s),
     })));
 
     if (candidates.length === 0) {
-      throw new Error(`No stations matched keywords: ${keywords.join(", ")}`);
+        throw new Error(`No stations matched keywords: ${keywords.join(", ")}`);
     }
 
     setStatus(`Found ${candidates.length} candidate stations. Checking for NO2...`);
 
-    let chosen = null;
     for (const s of candidates.slice(0, 20)) { // cap to avoid many requests
-      const id = getStationId(s);
-      if (!id) continue;
+        const id = getStationId(s);
+        if (!id) continue;
 
-      const ok = await stationHasNo2(id);
-      console.log("NO2 check:", { id, label: getStationLabel(s), ok });
+        const ok = await stationHasNo2(id);
+        console.log("NO2 check:", { id, label: getStationLabel(s), ok });
 
-      if (ok) { chosen = s; break; }
+        if (ok) { chosen = s; break; }
     }
 
     if (!chosen) {
-      throw new Error("None of the candidate stations returned NO₂ using formula=NO2.");
+        throw new Error("None of the candidate stations returned NO2 using formula=NO2.");
+    }
+
+    // ✅ remember for next clicks
+    selectedStation = chosen;
     }
 
     const stationId = getStationId(chosen);
 
-    // ✅ Cache check goes HERE (before fetching)
+
+    // Cache check (before fetching)
     if (cached.no2 && cached.stationId === stationId && String(cached.days) === String(days)) {
     setStatus(`Using cached NO2: ${cached.no2.length} records from ${stationId}. Fetching wind...`);
 
     const windHourly = await fetchWindHourly(days);
     renderNo2Chart(cached.no2, windHourly);
     renderNo2WindScatter(cached.no2, windHourly);
+    renderDailyNo2WindScatter(cached.no2, windHourly);
 
     setStatus(`Loaded ${cached.no2.length} NO2 records from ${stationId}. (cached NO2)`);
     return;
@@ -397,7 +515,7 @@ loadBtn.addEventListener("click", async () => {
 
     const no2 = await getNo2Measurements(stationId, days);
 
-    // ✅ Save to cache AFTER fetching
+    // Saving to cache AFTER fetching
     cached = { stationId, days, no2 };
 
     console.log("Chosen station:", chosen);
@@ -407,7 +525,7 @@ loadBtn.addEventListener("click", async () => {
     const windHourly = await fetchWindHourly(days);
     renderNo2Chart(no2, windHourly);
     renderNo2WindScatter(no2,windHourly);
-
+    renderDailyNo2WindScatter(no2,windHourly);
 
     //renderNo2Chart(no2);
     setStatus(`Loaded ${no2.length} NO2 records from ${stationId}.`);
@@ -415,7 +533,6 @@ loadBtn.addEventListener("click", async () => {
     console.log("Chosen station:", chosen);
     console.log("NO2 rows sample:", no2.slice(0, 5));
 
-    setStatus(`Loaded ${no2.length} NO2 records from ${stationId}. (Check console)`);
   } catch (err) {
     console.error(err);
     setStatus(`Error: ${err.message}`);
