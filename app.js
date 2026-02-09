@@ -116,6 +116,76 @@ function renderNo2Chart(no2Rows, windHourly) {
   });
 }
 
+let scatterChart;
+
+function renderNo2WindScatter(no2Rows, windHourly) {
+  // Build wind lookup by hour
+  const windMap = new Map();
+  for (let i = 0; i < windHourly.time.length; i++) {
+    windMap.set(windHourly.time[i], windHourly.wind_speed_10m[i]);
+  }
+
+  // Build scatter points: wind speed vs NO2
+  const points = no2Rows
+    .map(r => {
+      const hourKey = r.timestamp_measured.slice(0, 16); // YYYY-MM-DDTHH:MM
+      const wind = windMap.get(hourKey);
+      const no2 = Number(r.value);
+
+      if (!Number.isFinite(wind) || !Number.isFinite(no2)) return null;
+
+      return {
+        x: wind, // wind speed
+        y: no2   // NO2 concentration
+      };
+    })
+    .filter(Boolean);
+
+  const xs = points.map(p => p.x);
+  const xMax = Math.ceil(Math.max(...xs) / 5) * 5;
+
+  console.log("Scatter wind min/max:", Math.min(...xs), Math.max(...xs));
+
+  console.log("Scatter points:", points.length);
+
+  const ctx = document.getElementById("scatterChart").getContext("2d");
+  if (scatterChart) scatterChart.destroy();
+
+  scatterChart = new Chart(ctx, {
+    type: "scatter",
+    data: {
+      datasets: [{
+        label: "Hourly NO2 vs Wind speed",
+        data: points,
+        pointRadius: 2,
+        pointHoverRadius: 4
+      }]
+    },
+    options: {
+      responsive: true,
+      parsing: false,
+      scales: {
+        x: {
+          title: {
+            display: true,
+            text: "Wind speed at 10 m (km/h)"
+          },
+          beginAtZero: true,
+          max: xMax,
+          ticks: { stepSize: 5 }
+        },
+        y: {
+          title: {
+            display: true,
+            text: "NO2 concentration (µg/m³)"
+          },
+          beginAtZero: true
+        }
+      }
+    }
+  });
+}
+
 
 // 02 EXTRACING NO2 DATA
 
@@ -254,6 +324,7 @@ async function fetchWindHourly(days) {
     `?latitude=${lat}&longitude=${lon}` +
     `&start_date=${fmt(start)}&end_date=${fmt(end)}` +
     `&hourly=wind_speed_10m,wind_direction_10m` +
+    `&wind_speed_unit=kmh` +
     `&timezone=UTC`;
 
   const json = await fetchJson(url);
@@ -312,19 +383,19 @@ loadBtn.addEventListener("click", async () => {
 
     // ✅ Cache check goes HERE (before fetching)
     if (cached.no2 && cached.stationId === stationId && String(cached.days) === String(days)) {
-    setStatus(`Using cached NO₂: ${cached.no2.length} records from ${stationId}.`);
-    console.log("Chosen station:", chosen);
-    console.log("NO2 rows sample:", cached.no2.slice(0, 5));
-    renderNo2Chart(cached.no2);
-    return; // stop here, don't refetch
+    setStatus(`Using cached NO2: ${cached.no2.length} records from ${stationId}. Fetching wind...`);
+
+    const windHourly = await fetchWindHourly(days);
+    renderNo2Chart(cached.no2, windHourly);
+    renderNo2WindScatter(cached.no2, windHourly);
+
+    setStatus(`Loaded ${cached.no2.length} NO2 records from ${stationId}. (cached NO2)`);
+    return;
     }
 
     setStatus(`Fetching NO2 (paged) from ${stationId} (${getStationLabel(chosen)})...`);
 
     const no2 = await getNo2Measurements(stationId, days);
-
-    const wind = await fetchWindHourly(days);
-    console.log("wind sample:", wind.time[0], wind.wind_speed_10m[0], wind.wind_direction_10m[0]);
 
     // ✅ Save to cache AFTER fetching
     cached = { stationId, days, no2 };
@@ -335,6 +406,7 @@ loadBtn.addEventListener("click", async () => {
 
     const windHourly = await fetchWindHourly(days);
     renderNo2Chart(no2, windHourly);
+    renderNo2WindScatter(no2,windHourly);
 
 
     //renderNo2Chart(no2);
