@@ -599,7 +599,6 @@ loadBtn.addEventListener("click", async () => {
 
     const stationId = getStationId(chosen);
 
-
     // Cache check (before fetching)
     if (cached.no2 && cached.stationId === stationId && String(cached.days) === String(days)) {
     setStatus(`Using cached NO2: ${cached.no2.length} records from ${stationId}. Fetching wind...`);
