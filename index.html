@@ -40,7 +40,10 @@
                 </label>
 
                 <label class="controlField">
-                <span>Station search:</span>
+                <div class="controlHead">
+                    <span>Station search:</span>
+                    <div id="stationMatchMeta" class="controlMeta"></div>
+                </div>
                 <input id="stationSearch" type="search" placeholder="Type station name or ID" />
                 </label>
             </div>
@@ -54,11 +57,61 @@
                 </label>
 
                 <label class="controlField">
-                <span>Weather metric:</span>
+                <span>Weather:</span>
                 <select id="weatherMetric">
                     <option value="wind_speed_10m" selected>Wind Speed</option>
                     <option value="temperature_2m">Temperature</option>
+                    <option value="precipitation">Precipitation</option>
                 </select>
+                </label>
+
+                <label class="controlField">
+                <span class="labelWithHelp">
+                    Weather lag
+                    <button
+                        type="button"
+                        class="helpBtn"
+                        aria-label="Weather lag help"
+                        data-help="Pairs pollution at time t with weather at time t minus lag. Example: lag 1h uses weather at 18:00 for pollution at 19:00."
+                        title="Pairs pollution at time t with weather at time t minus lag. Example: lag 1h uses weather at 18:00 for pollution at 19:00."
+                    >?</button>
+                </span>
+                <select id="weatherLag">
+                    <option value="0" selected>Same hour</option>
+                    <option value="1">1h earlier</option>
+                    <option value="3">3h earlier</option>
+                    <option value="6">6h earlier</option>
+                    <option value="12">12h earlier</option>
+                    <option value="24">24h earlier</option>
+                </select>
+                </label>
+
+                <label class="toggleField">
+                <input id="advancedToggle" type="checkbox" />
+                <span class="toggleLabelWithHelp">
+                    Advanced
+                    <button
+                        type="button"
+                        class="helpBtn"
+                        aria-label="Advanced mode help"
+                        data-help="Shows additional diagnostics including correlations by segment, p-values, confidence intervals, and robust options."
+                        title="Shows additional diagnostics including correlations by segment, p-values, confidence intervals, and robust options."
+                    >?</button>
+                </span>
+                </label>
+
+                <label class="toggleField">
+                <input id="visualSmoothToggle" type="checkbox" />
+                <span class="toggleLabelWithHelp">
+                    Smooth chart
+                    <button
+                        type="button"
+                        class="helpBtn"
+                        aria-label="Smooth chart help"
+                        data-help="Winsorizes only the charted pollutant series (top 1%) to reduce visual squashing from extreme spikes. Does not change fetched data."
+                        title="Winsorizes only the charted pollutant series (top 1%) to reduce visual squashing from extreme spikes. Does not change fetched data."
+                    >?</button>
+                </span>
                 </label>
 
                 <button id="loadBtn">Load data</button>
@@ -81,6 +134,59 @@
             <div class="insight">
                 <div class="kpi" id="kpiCorr">—</div>
                 <div class="kpiLabel"><span id="corrLabel">Wind–pollutant correlation (daily)</span></div>
+            </div>
+        </section>
+
+        <section id="advancedPanel" class="advancedPanel" hidden>
+            <div class="advancedHead">
+                <h2>Advanced diagnostics</h2>
+                <div class="advancedControls">
+                    <label class="advancedControl">
+                        <span>View:</span>
+                        <select id="advancedViewMode">
+                            <option value="text" selected>Text</option>
+                            <option value="table">Table</option>
+                        </select>
+                    </label>
+                    <label id="precipDailyControl" class="advancedControl">
+                        <span>Precip daily:</span>
+                        <select id="precipDailyMode">
+                            <option value="total" selected>Total (mm/day)</option>
+                            <option value="mean">Mean (mm/h)</option>
+                        </select>
+                    </label>
+                    <label class="advancedToggle">
+                        <input id="robustToggle" type="checkbox" />
+                        <span class="toggleLabelWithHelp">
+                            Robust mode (winsorize top 1%)
+                            <button
+                                type="button"
+                                class="helpBtn"
+                                aria-label="Robust mode help"
+                                data-help="Uses winsorized pollutant values (top 1% capped) for advanced diagnostics and chart rendering to reduce outlier influence."
+                                title="Uses winsorized pollutant values (top 1% capped) for advanced diagnostics and chart rendering to reduce outlier influence."
+                            >?</button>
+                        </span>
+                    </label>
+                </div>
+            </div>
+            <pre id="advancedStats">Load data to see advanced diagnostics.</pre>
+            <div id="advancedTableWrap" class="advancedTableWrap" hidden>
+                <table class="advancedTable">
+                    <thead>
+                        <tr>
+                            <th>Segment</th>
+                            <th>n</th>
+                            <th>Pearson r</th>
+                            <th>Pearson p</th>
+                            <th>Spearman rho</th>
+                            <th>Spearman p</th>
+                            <th>95% CI</th>
+                            <th>Notes</th>
+                        </tr>
+                    </thead>
+                    <tbody id="advancedTableBody"></tbody>
+                </table>
             </div>
         </section>
 

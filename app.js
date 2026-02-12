@@ -4,6 +4,19 @@ const daysEl = document.getElementById("days");
 const metricEl = document.getElementById("metric");
 const stationEl = document.getElementById("station");
 const stationSearchEl = document.getElementById("stationSearch");
+const stationMatchMetaEl = document.getElementById("stationMatchMeta");
+const advancedToggleEl = document.getElementById("advancedToggle");
+const advancedPanelEl = document.getElementById("advancedPanel");
+const advancedStatsEl = document.getElementById("advancedStats");
+const advancedViewModeEl = document.getElementById("advancedViewMode");
+const advancedTableWrapEl = document.getElementById("advancedTableWrap");
+const advancedTableBodyEl = document.getElementById("advancedTableBody");
+const robustToggleEl = document.getElementById("robustToggle");
+const precipDailyModeEl = document.getElementById("precipDailyMode");
+const precipDailyControlEl = document.getElementById("precipDailyControl");
+const weatherLagEl = document.getElementById("weatherLag");
+const visualSmoothToggleEl = document.getElementById("visualSmoothToggle");
+const metricBaseLabels = new Map(Array.from(metricEl?.options ?? []).map(opt => [opt.value, opt.textContent]));
 const pageTitle = document.getElementById("pageTitle");
 const hourlyTitleEl = document.getElementById("hourlyTitle");
 const dailyTitleEl = document.getElementById("dailyTitle");
@@ -12,10 +25,180 @@ function setStatus(msg) {
   statusEl.textContent = msg;
 }
 
+function setAdvancedVisibility() {
+  if (!advancedPanelEl) return;
+  advancedPanelEl.hidden = !advancedToggleEl?.checked;
+}
+
+function selectedWeatherMetric() {
+  return document.getElementById("weatherMetric")?.value ?? "";
+}
+
+function updatePrecipDailyControlVisibility() {
+  if (!precipDailyControlEl || !precipDailyModeEl) return;
+  const show = selectedWeatherMetric() === "precipitation";
+  precipDailyControlEl.hidden = !show;
+  precipDailyModeEl.disabled = !show;
+}
+
+let activeHelpPopover = null;
+
+function closeHelpPopover() {
+  if (activeHelpPopover) {
+    activeHelpPopover.remove();
+    activeHelpPopover = null;
+  }
+}
+
+function openHelpPopover(btn, text) {
+  closeHelpPopover();
+  if (!btn || !text) return;
+
+  const pop = document.createElement("div");
+  pop.className = "helpPopover";
+  pop.setAttribute("role", "tooltip");
+  pop.textContent = text;
+  document.body.appendChild(pop);
+
+  const rect = btn.getBoundingClientRect();
+  const top = window.scrollY + rect.bottom + 8;
+  let left = window.scrollX + rect.left - 6;
+  const maxLeft = window.scrollX + window.innerWidth - pop.offsetWidth - 12;
+  if (left > maxLeft) left = maxLeft;
+  if (left < window.scrollX + 8) left = window.scrollX + 8;
+  pop.style.top = `${top}px`;
+  pop.style.left = `${left}px`;
+
+  activeHelpPopover = pop;
+}
+
+function initHelpButtons() {
+  const buttons = Array.from(document.querySelectorAll(".helpBtn"));
+  if (!buttons.length) return;
+
+  buttons.forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const text = btn.getAttribute("data-help") || btn.getAttribute("title") || "";
+      const isSame = activeHelpPopover && activeHelpPopover.textContent === text;
+      if (isSame) {
+        closeHelpPopover();
+        return;
+      }
+      openHelpPopover(btn, text);
+    });
+  });
+
+  document.addEventListener("click", () => closeHelpPopover());
+  window.addEventListener("resize", () => closeHelpPopover());
+  window.addEventListener("scroll", () => closeHelpPopover(), { passive: true });
+}
+
+function setAdvancedText(msg) {
+  latestAdvancedText = String(msg ?? "").trim();
+  if (advancedStatsEl) {
+    advancedStatsEl.textContent = latestAdvancedText || "Load data to see advanced diagnostics.";
+  }
+}
+
+function getAdvancedViewMode() {
+  return advancedViewModeEl?.value === "table" ? "table" : "text";
+}
+
+function setAdvancedTableRows(rows) {
+  if (!advancedTableBodyEl) return;
+  const safeRows = Array.isArray(rows) ? rows : [];
+  advancedTableBodyEl.innerHTML = safeRows.map(r => `
+    <tr>
+      <td>${r.segment}</td>
+      <td>${r.n}</td>
+      <td>${r.pearsonR}</td>
+      <td>${r.pearsonP}</td>
+      <td>${r.spearmanRho}</td>
+      <td>${r.spearmanP}</td>
+      <td>${r.ci}</td>
+      <td>${r.notes}</td>
+    </tr>
+  `).join("");
+}
+
+function applyAdvancedViewMode() {
+  const mode = getAdvancedViewMode();
+  if (advancedStatsEl) advancedStatsEl.hidden = mode === "table";
+  if (advancedTableWrapEl) advancedTableWrapEl.hidden = mode !== "table";
+}
+
+function erfApprox(x) {
+  // Abramowitz and Stegun approximation
+  const sign = x < 0 ? -1 : 1;
+  const a = 0.147;
+  const xx = Math.abs(x);
+  const t = 1 + a * xx * xx;
+  const inner = 1 - Math.exp(-xx * xx * (4 / Math.PI + a * xx * xx) / t);
+  return sign * Math.sqrt(inner);
+}
+
+function normalCdf(x) {
+  return 0.5 * (1 + erfApprox(x / Math.SQRT2));
+}
+
+function correlationStats(r, n) {
+  if (!Number.isFinite(r) || !Number.isFinite(n) || n < 2) {
+    return { n, r: null, p: null, ciLow: null, ciHigh: null };
+  }
+
+  let p = null;
+  if (n > 3 && Math.abs(r) < 1) {
+    const z = Math.atanh(r) * Math.sqrt(n - 3);
+    p = 2 * (1 - normalCdf(Math.abs(z)));
+  }
+
+  let ciLow = null;
+  let ciHigh = null;
+  if (n > 3 && Math.abs(r) < 1) {
+    const z = Math.atanh(r);
+    const se = 1 / Math.sqrt(n - 3);
+    const zCrit = 1.96;
+    ciLow = Math.tanh(z - zCrit * se);
+    ciHigh = Math.tanh(z + zCrit * se);
+  }
+
+  return { n, r, p, ciLow, ciHigh };
+}
+
+function fmtStat(v, digits = 2) {
+  if (!Number.isFinite(v)) return "n/a";
+  return v.toFixed(digits);
+}
+
+function fmtPValue(p) {
+  if (!Number.isFinite(p)) return "n/a";
+  if (p < 0.001) return "<0.001";
+  return p.toFixed(3);
+}
+
+function correlationStrengthLabel(r) {
+  if (!Number.isFinite(r)) return "unknown";
+  const a = Math.abs(r);
+  if (a < 0.2) return "very weak";
+  if (a < 0.4) return "weak";
+  if (a < 0.6) return "moderate";
+  if (a < 0.8) return "strong";
+  return "very strong";
+}
+
+function lowSampleWarning(n, minN = 20) {
+  return Number.isFinite(n) && n < minN ? ` [caution: low n=${n}]` : "";
+}
+
 let cached = { stationId: null, days: null, metric: null, rows: null };
 
 let selectedStation = null;
 let availableStations = []; // All candidate stations in current region
+let latestAdvancedText = "";
+let latestAdvancedArgs = null;
+let latestRenderContext = null;
 
 // Request protection / caching settings
 const REQUEST_COOLDOWN_MS = 5 * 60 * 1000; // don't re-request same query within 5 minutes
@@ -73,6 +256,8 @@ function setLoading(isLoading) {
   if (daysEl) daysEl.disabled = isLoading;
   if (stationEl) stationEl.disabled = isLoading;
   if (stationSearchEl) stationSearchEl.disabled = isLoading;
+  if (weatherLagEl) weatherLagEl.disabled = isLoading;
+  if (visualSmoothToggleEl) visualSmoothToggleEl.disabled = isLoading;
 }
 
 // 00 HELPERS FOR STATS CALCULATIONS
@@ -96,6 +281,113 @@ function pearsonCorr(xs, ys) {
   const den = Math.sqrt(dx * dy);
   if (!Number.isFinite(den) || den === 0) return null;
   return num / den;
+}
+
+function rankValues(arr) {
+  const pairs = arr.map((v, i) => ({ v, i })).sort((a, b) => a.v - b.v);
+  const ranks = new Array(arr.length);
+  let i = 0;
+  while (i < pairs.length) {
+    let j = i;
+    while (j + 1 < pairs.length && pairs[j + 1].v === pairs[i].v) j++;
+    const avgRank = (i + j + 2) / 2; // 1-based rank average for ties
+    for (let k = i; k <= j; k++) ranks[pairs[k].i] = avgRank;
+    i = j + 1;
+  }
+  return ranks;
+}
+
+function spearmanCorr(xs, ys) {
+  const n = Math.min(xs.length, ys.length);
+  if (n < 2) return null;
+  const rx = rankValues(xs.slice(0, n));
+  const ry = rankValues(ys.slice(0, n));
+  return pearsonCorr(rx, ry);
+}
+
+function quantile(sortedValues, q) {
+  if (!Array.isArray(sortedValues) || sortedValues.length === 0) return null;
+  const pos = (sortedValues.length - 1) * q;
+  const lo = Math.floor(pos);
+  const hi = Math.ceil(pos);
+  if (lo === hi) return sortedValues[lo];
+  const w = pos - lo;
+  return sortedValues[lo] * (1 - w) + sortedValues[hi] * w;
+}
+
+function winsorizeTop(values, q = 0.99) {
+  if (!Array.isArray(values) || values.length === 0) return { values: [], cap: null, cappedCount: 0 };
+  const sorted = values.slice().sort((a, b) => a - b);
+  const cap = quantile(sorted, q);
+  if (!Number.isFinite(cap)) return { values: values.slice(), cap: null, cappedCount: 0 };
+  let cappedCount = 0;
+  const out = values.map(v => {
+    if (v > cap) {
+      cappedCount++;
+      return cap;
+    }
+    return v;
+  });
+  return { values: out, cap, cappedCount };
+}
+
+function correlationBundle(points, robust = false) {
+  const valid = (Array.isArray(points) ? points : []).filter(p => Number.isFinite(p?.x) && Number.isFinite(p?.y));
+  const n = valid.length;
+  if (n < 2) {
+    return {
+      n,
+      pearson: correlationStats(null, n),
+      spearman: correlationStats(null, n),
+      winsorCap: null,
+      winsorCappedCount: 0
+    };
+  }
+  const x = valid.map(p => p.x);
+  const y = valid.map(p => p.y);
+  let winsorCap = null;
+  let winsorCappedCount = 0;
+  const yUsed = robust ? (() => {
+    const w = winsorizeTop(y, 0.99);
+    winsorCap = w.cap;
+    winsorCappedCount = w.cappedCount;
+    return w.values;
+  })() : y;
+
+  const rPearson = pearsonCorr(x, yUsed);
+  const rSpearman = spearmanCorr(x, yUsed);
+  return {
+    n,
+    pearson: correlationStats(rPearson, n),
+    spearman: correlationStats(rSpearman, n),
+    winsorCap,
+    winsorCappedCount
+  };
+}
+
+function filterRowsForRobustCharts(rows, q = 0.99) {
+  const source = Array.isArray(rows) ? rows : [];
+  if (!robustToggleEl?.checked || source.length < 20) {
+    return { rows: source, removed: 0, cap: null };
+  }
+
+  const vals = source.map(getRowNumericValue).filter(Number.isFinite);
+  if (vals.length < 20) return { rows: source, removed: 0, cap: null };
+
+  const sorted = vals.slice().sort((a, b) => a - b);
+  const cap = quantile(sorted, q);
+  if (!Number.isFinite(cap)) return { rows: source, removed: 0, cap: null };
+
+  let removed = 0;
+  const filtered = source.filter(r => {
+    const v = getRowNumericValue(r);
+    if (!Number.isFinite(v)) return true;
+    const keep = v <= cap;
+    if (!keep) removed++;
+    return keep;
+  });
+
+  return { rows: filtered.length > 0 ? filtered : source, removed, cap };
 }
 
 function setKpi(id, value) {
@@ -177,8 +469,54 @@ function buildWindMap(hourly) {
   return map;
 }
 
+function getWeatherLagHours() {
+  const n = Number(weatherLagEl?.value ?? 0);
+  return Number.isFinite(n) && n >= 0 ? n : 0;
+}
+
+function weatherLagSuffix(lagHours) {
+  return lagHours > 0 ? ` (lag ${lagHours}h)` : "";
+}
+
+function weatherKeyForMeasurement(ts, lagHours = 0) {
+  const d = new Date(ts);
+  if (!Number.isFinite(d.getTime())) return String(ts).slice(0, 16);
+  d.setUTCHours(d.getUTCHours() - lagHours);
+  return d.toISOString().slice(0, 16);
+}
+
+function getAdvancedPrecipMode() {
+  return precipDailyModeEl?.value === "mean" ? "mean" : "total";
+}
+
+function buildDailyPointsFromPaired(pairedHourly, weatherMetric, precipMode = "mean") {
+  const acc = new Map(); // day -> {sx, sy, n}
+  for (const p of (Array.isArray(pairedHourly) ? pairedHourly : [])) {
+    const day = toDayKey(p.ts);
+    const cur = acc.get(day) ?? { sx: 0, sy: 0, n: 0 };
+    cur.sx += p.x;
+    cur.sy += p.y;
+    cur.n += 1;
+    acc.set(day, cur);
+  }
+
+  const points = [];
+  for (const [day, agg] of acc.entries()) {
+    if (!agg || !agg.n) continue;
+    const weatherValue = (weatherMetric === "precipitation" && precipMode === "total")
+      ? agg.sx
+      : (agg.sx / agg.n);
+    const pollutantMean = agg.sy / agg.n;
+    if (!Number.isFinite(weatherValue) || !Number.isFinite(pollutantMean)) continue;
+    points.push({ x: weatherValue, y: pollutantMean, day });
+  }
+
+  points.sort((a, b) => a.x - b.x);
+  return points;
+}
+
 // windHourly is optional (pass null/undefined for NO2-only)
-function renderMetricChart(rows, weatherHourly, metric, weatherMetric = 'wind_speed_10m') {
+function renderMetricChart(rows, weatherHourly, metric, weatherMetric = 'wind_speed_10m', lagHours = 0, smoothVisual = false) {
   const points = rows
     .map(r => {
       const ts = getRowTimestamp(r);
@@ -193,10 +531,17 @@ function renderMetricChart(rows, weatherHourly, metric, weatherMetric = 'wind_sp
 
   const display = formatMetricLabel(metric);
   const unit = unitForMetric(metric);
+  let pollutantPoints = points;
+  let smoothedCount = 0;
+  if (smoothVisual && points.length > 5) {
+    const w = winsorizeTop(points.map(p => p.y), 0.99);
+    pollutantPoints = points.map((p, i) => ({ x: p.x, y: w.values[i] }));
+    smoothedCount = w.cappedCount;
+  }
 
   const datasets = [{
-    label: `${display} (${unit})`,
-    data: points,
+    label: `${display} (${unit})${smoothVisual ? ` [smoothed${smoothedCount ? `, capped ${smoothedCount}` : ""}]` : ""}`,
+    data: pollutantPoints,
     yAxisID: "y",
     pointRadius: 0,
     borderWidth: 1
@@ -211,14 +556,14 @@ function renderMetricChart(rows, weatherHourly, metric, weatherMetric = 'wind_sp
     const weatherPoints = rows
       .map(r => {
         const ts = getRowTimestamp(r);
-        const hourKey = String(ts).slice(0, 16);
+        const hourKey = weatherKeyForMeasurement(ts, lagHours);
         const ws = weatherMap.get(hourKey) ?? null;
         return { x: new Date(ts), y: ws };
       })
       .filter(p => Number.isFinite(p.x.getTime()) && Number.isFinite(p.y));
 
     datasets.push({
-      label: formatWeatherLabel(weatherMetric),
+      label: `${formatWeatherLabel(weatherMetric)}${weatherLagSuffix(lagHours)}`,
       data: weatherPoints,
       yAxisID: "y1",
       pointRadius: 0,
@@ -239,18 +584,90 @@ function renderMetricChart(rows, weatherHourly, metric, weatherMetric = 'wind_sp
       plugins: { decimation: { enabled: true, algorithm: "min-max" } },
       scales: {
         x: { type: "time", min: xMin, max: xMax, time: { unit: "week" }, ticks: { maxTicksLimit: 8 } },
-        y: { beginAtZero: true, position: "left", title: { display: true, text: `${display} (${unit})` } },
-        y1: weatherHourly?.time?.length ? { beginAtZero: false, position: "right", grid: { drawOnChartArea: false }, title: { display: true, text: `${formatWeatherLabel(weatherMetric)} (${unitForWeather(weatherMetric)})` } } : undefined
+        y: { beginAtZero: true, min: 0, position: "left", title: { display: true, text: `${display} (${unit})` } },
+        y1: weatherHourly?.time?.length ? { beginAtZero: weatherMetric === 'precipitation', position: "right", grid: { drawOnChartArea: false }, title: { display: true, text: `${formatWeatherLabel(weatherMetric)}${weatherLagSuffix(lagHours)} (${unitForWeather(weatherMetric)})` } } : undefined
       }
     }
   });
 }
 
+function renderAllCharts(rows, weatherHourly, metric, weatherMetric, lagHours, smoothVisual) {
+  renderMetricChart(rows, weatherHourly, metric, weatherMetric, lagHours, smoothVisual);
+  renderMetricWindScatter(rows, weatherHourly, metric, weatherMetric, lagHours);
+  renderDailyMetricWindScatter(rows, weatherHourly, metric, weatherMetric, lagHours);
+}
+
+function updateMetricWeatherTitles(metric, weatherMetric, lagHours) {
+  const display = formatMetricLabel(metric);
+  const weatherLabel = formatWeatherLabel(weatherMetric);
+  const lagSuffix = weatherLagSuffix(lagHours);
+  if (hourlyTitleEl) hourlyTitleEl.textContent = `${display} vs ${weatherLabel}${lagSuffix} (Hourly)`;
+  if (dailyTitleEl) dailyTitleEl.textContent = `${display} vs ${weatherLabel}${lagSuffix} (Daily Averages)`;
+  const corrLabelEl = document.getElementById('corrLabel');
+  if (corrLabelEl) corrLabelEl.textContent = `${weatherLabel.toLowerCase()}${lagSuffix}–pollutant correlation (daily)`;
+}
+
+function setLatestRenderContext(rows, weatherHourly, metric, weatherMetric, stationId) {
+  latestRenderContext = {
+    rows: Array.isArray(rows) ? rows : [],
+    weatherHourly,
+    metric,
+    weatherMetric,
+    stationId
+  };
+}
+
+function rerenderFromLatest(reason = "") {
+  if (!latestRenderContext) return;
+  const metric = latestRenderContext.metric;
+  const weatherMetric = selectedWeatherMetric() || latestRenderContext.weatherMetric;
+  const lagHours = getWeatherLagHours();
+  const smoothVisual = !!visualSmoothToggleEl?.checked;
+
+  updateMetricWeatherTitles(metric, weatherMetric, lagHours);
+  updatePrecipDailyControlVisibility();
+
+  const robustChart = filterRowsForRobustCharts(latestRenderContext.rows);
+  renderAllCharts(robustChart.rows, latestRenderContext.weatherHourly, metric, weatherMetric, lagHours, smoothVisual);
+
+  if (reason) {
+    const robustMsg = robustChart.removed > 0 ? ` Robust mode removed ${robustChart.removed} outlier point(s).` : "";
+    setStatus(`Updated view (${reason}) using loaded data.${robustMsg}`);
+  }
+}
+
 let scatterChart;
 let dailyScatterChart;
 
+function clearVisuals() {
+  if (chart) {
+    chart.destroy();
+    chart = null;
+  }
+  if (scatterChart) {
+    scatterChart.destroy();
+    scatterChart = null;
+  }
+  if (dailyScatterChart) {
+    dailyScatterChart.destroy();
+    dailyScatterChart = null;
+  }
 
-function renderMetricWindScatter(rows, weatherHourly, metric, weatherMetric = 'wind_speed_10m') {
+  setKpi("kpiCurrent", "â€”");
+  setKpi("kpiAbove25", "â€”");
+  setKpi("kpiCorr", "â€”");
+
+  const currentEl = document.getElementById("kpiCurrent");
+  if (currentEl) currentEl.classList.remove("kpiGood", "kpiElevated", "kpiHigh");
+
+  latestAdvancedArgs = null;
+  latestRenderContext = null;
+  setAdvancedText("");
+  setAdvancedTableRows([]);
+}
+
+
+function renderMetricWindScatter(rows, weatherHourly, metric, weatherMetric = 'wind_speed_10m', lagHours = 0) {
   // Build weather lookup by hour
   const weatherMap = new Map();
   for (let i = 0; i < weatherHourly.time.length; i++) {
@@ -260,7 +677,7 @@ function renderMetricWindScatter(rows, weatherHourly, metric, weatherMetric = 'w
   const points = rows
     .map(r => {
       const ts = getRowTimestamp(r);
-      const hourKey = String(ts).slice(0, 16);
+      const hourKey = weatherKeyForMeasurement(ts, lagHours);
       const weather = weatherMap.get(hourKey);
       const val = getRowNumericValue(r);
       if (!Number.isFinite(weather) || !Number.isFinite(val)) return null;
@@ -269,13 +686,16 @@ function renderMetricWindScatter(rows, weatherHourly, metric, weatherMetric = 'w
     .filter(Boolean);
 
   const xs = points.map(p => p.x);
+  const observedXMax = xs.length ? Math.max(...xs) : 0;
   let xMax;
   if (weatherMetric === 'wind_speed_10m') {
-    xMax = Math.ceil(Math.max(...xs) / 5) * 5;
+    xMax = Math.ceil(observedXMax / 5) * 5;
   } else if (weatherMetric === 'temperature_2m') {
-    xMax = Math.ceil(Math.max(...xs));
+    xMax = Math.ceil(observedXMax);
+  } else if (weatherMetric === 'precipitation') {
+    xMax = Math.max(1, Math.ceil(observedXMax));
   } else {
-    xMax = Math.max(...xs) * 1.1;
+    xMax = observedXMax * 1.1;
   }
 
   console.log("Scatter points:", points.length);
@@ -290,7 +710,7 @@ function renderMetricWindScatter(rows, weatherHourly, metric, weatherMetric = 'w
 
   scatterChart = new Chart(ctx, {
     type: "scatter",
-    data: { datasets: [{ label: `Hourly ${display} vs ${weatherLabel}`, data: points, pointRadius: 2, pointHoverRadius: 4 }] },
+    data: { datasets: [{ label: `Hourly ${display} vs ${weatherLabel}${weatherLagSuffix(lagHours)}`, data: points, pointRadius: 2, pointHoverRadius: 4 }] },
     options: {
       responsive: true,
       maintainAspectRatio: false,
@@ -309,7 +729,7 @@ function renderMetricWindScatter(rows, weatherHourly, metric, weatherMetric = 'w
         }
       },
       scales: {
-        x: { title: { display: true, text: weatherMetric === 'wind_speed_10m' ? `${weatherLabel} at 10 m (${weatherUnit})` : `${weatherLabel} (${weatherUnit})` }, beginAtZero: weatherMetric === 'wind_speed_10m', max: xMax, ticks: { stepSize: weatherMetric === 'wind_speed_10m' ? 5 : 2 } },
+        x: { title: { display: true, text: weatherMetric === 'wind_speed_10m' ? `${weatherLabel}${weatherLagSuffix(lagHours)} at 10 m (${weatherUnit})` : `${weatherLabel}${weatherLagSuffix(lagHours)} (${weatherUnit})` }, beginAtZero: weatherMetric === 'wind_speed_10m' || weatherMetric === 'precipitation', max: xMax, ticks: { stepSize: weatherMetric === 'wind_speed_10m' ? 5 : (weatherMetric === 'precipitation' ? 1 : 2) } },
         y: { title: { display: true, text: `${display} (${unit})` }, beginAtZero: true }
       }
     }
@@ -395,10 +815,118 @@ function dailyMeanFromWeather(weatherHourly, metric) {
   return means;
 }
 
+function buildHourlyJoinedPoints(rows, weatherHourly, weatherMetric, lagHours = 0) {
+  const points = [];
+  if (!Array.isArray(rows) || !weatherHourly?.time?.length) return points;
 
-function renderDailyMetricWindScatter(rows, weatherHourly, metric, weatherMetric = 'wind_speed_10m') {
-  const metricDaily = dailyMeanFromRows(rows);      // day -> mean metric (re-using helper)
-  const weatherDaily = dailyMeanFromWeather(weatherHourly, weatherMetric); // day -> mean weather
+  const weatherMap = new Map();
+  for (let i = 0; i < weatherHourly.time.length; i++) {
+    weatherMap.set(weatherHourly.time[i], weatherHourly[weatherMetric][i]);
+  }
+
+  for (const r of rows) {
+    const ts = getRowTimestamp(r);
+    const hourKey = weatherKeyForMeasurement(ts, lagHours);
+    const wx = Number(weatherMap.get(hourKey));
+    const y = getRowNumericValue(r);
+    if (!Number.isFinite(wx) || !Number.isFinite(y)) continue;
+    points.push({ ts, x: wx, y });
+  }
+
+  return points;
+}
+
+function renderAdvancedAnalytics(rows, weatherHourly, metric, weatherMetric, dailyPoints, lagHours = 0) {
+  latestAdvancedArgs = { rows, weatherHourly, metric, weatherMetric, dailyPoints, lagHours };
+  const robust = !!robustToggleEl?.checked;
+  const precipMode = getAdvancedPrecipMode();
+
+  const hourly = buildHourlyJoinedPoints(rows, weatherHourly, weatherMetric, lagHours);
+  const isRushHour = (h) => [7, 8, 9, 16, 17, 18].includes(h);
+  const rush = [];
+  const nonRush = [];
+  for (const p of hourly) {
+    const d = new Date(p.ts);
+    const hour = d.getUTCHours();
+    if (isRushHour(hour)) rush.push(p);
+    else nonRush.push(p);
+  }
+
+  const weekday = [];
+  const weekend = [];
+  for (const p of dailyPoints) {
+    const day = new Date(`${p.day}T00:00:00Z`).getUTCDay();
+    if (day === 0 || day === 6) weekend.push(p);
+    else weekday.push(p);
+  }
+
+  const dailyBundle = correlationBundle(dailyPoints, robust);
+  const rushBundle = correlationBundle(rush, robust);
+  const nonRushBundle = correlationBundle(nonRush, robust);
+  const weekdayBundle = correlationBundle(weekday, robust);
+  const weekendBundle = correlationBundle(weekend, robust);
+
+  const weatherLabel = formatWeatherLabel(weatherMetric);
+  function corrPair(bundle) {
+    const p = bundle.pearson;
+    const s = bundle.spearman;
+    return `Pearson r=${fmtStat(p.r)} (${correlationStrengthLabel(p.r)}), p=${fmtPValue(p.p)}; Spearman rho=${fmtStat(s.r)} (${correlationStrengthLabel(s.r)}), p=${fmtPValue(s.p)}`;
+  }
+
+  function line(label, bundle, includeCI = false) {
+    const p = bundle.pearson;
+    const ciText = includeCI ? `, 95% CI=[${fmtStat(p.ciLow)}, ${fmtStat(p.ciHigh)}]` : "";
+    const winsorText = robust ? `, winsorized=${bundle.winsorCappedCount}` : "";
+    return `${label}: n=${bundle.n}, ${corrPair(bundle)}${ciText}${winsorText}${lowSampleWarning(bundle.n)}`;
+  }
+
+  const modeText = weatherMetric === "precipitation" ? ` Precip daily mode: ${precipMode}.` : "";
+  const header = (robust ? "Robust mode ON: top 1% pollutant values winsorized per cohort." : "Robust mode OFF: raw values.") + modeText;
+  const formattedLines = [
+    header,
+    line(`Daily ${weatherLabel.toLowerCase()}${weatherLagSuffix(lagHours)} vs ${formatMetricLabel(metric)}`, dailyBundle, true),
+    line("Rush-hour hourly (07-09, 16-18 UTC)", rushBundle),
+    line("Non-rush hourly", nonRushBundle),
+    line("Weekday daily", weekdayBundle),
+    line("Weekend daily", weekendBundle)
+  ];
+
+  function row(segment, bundle, includeCI = false) {
+    const p = bundle.pearson;
+    const s = bundle.spearman;
+    return {
+      segment,
+      n: String(bundle.n),
+      pearsonR: `${fmtStat(p.r)} (${correlationStrengthLabel(p.r)})`,
+      pearsonP: fmtPValue(p.p),
+      spearmanRho: `${fmtStat(s.r)} (${correlationStrengthLabel(s.r)})`,
+      spearmanP: fmtPValue(s.p),
+      ci: includeCI ? `[${fmtStat(p.ciLow)}, ${fmtStat(p.ciHigh)}]` : "n/a",
+      notes: `${robust ? `winsorized=${bundle.winsorCappedCount}` : "raw"}${lowSampleWarning(bundle.n)}`
+    };
+  }
+
+  const tableRows = [
+    row(`Daily ${weatherLabel.toLowerCase()}${weatherLagSuffix(lagHours)}`, dailyBundle, true),
+    row("Rush-hour hourly", rushBundle),
+    row("Non-rush hourly", nonRushBundle),
+    row("Weekday daily", weekdayBundle),
+    row("Weekend daily", weekendBundle)
+  ];
+
+  setAdvancedText(formattedLines.join("\n"));
+  setAdvancedTableRows(tableRows);
+  applyAdvancedViewMode();
+}
+
+function renderDailyMetricWindScatter(rows, weatherHourly, metric, weatherMetric = 'wind_speed_10m', lagHours = 0) {
+  const pairedHourly = buildHourlyJoinedPoints(rows, weatherHourly, weatherMetric, lagHours);
+  const chartPrecipMode = weatherMetric === 'precipitation' ? 'total' : 'mean';
+  const points = buildDailyPointsFromPaired(pairedHourly, weatherMetric, chartPrecipMode);
+  const advPrecipMode = weatherMetric === 'precipitation' ? getAdvancedPrecipMode() : 'mean';
+  const pointsForAdvanced = (advPrecipMode === chartPrecipMode)
+    ? points
+    : buildDailyPointsFromPaired(pairedHourly, weatherMetric, advPrecipMode);
 
   // Update current/latest reading KPI
   try {
@@ -434,17 +962,7 @@ function renderDailyMetricWindScatter(rows, weatherHourly, metric, weatherMetric
     setKpi("kpiCurrent", "—");
   }
 
-  // Join by day
-  const points = [];
-  for (const [day, metricMean] of metricDaily.entries()) {
-    const weatherMean = weatherDaily.get(day);
-    if (!Number.isFinite(weatherMean) || !Number.isFinite(metricMean)) continue;
-
-    points.push({ x: weatherMean, y: metricMean, day });
-  }
-
-  // Sort by weather (optional, just for sanity)
-  points.sort((a, b) => a.x - b.x);
+  // `points` already contains daily joined values sorted by weather
 
     // Determine WHO thresholds for the selected metric
     const dailyLimit = whoDailyLimit(metric);
@@ -505,6 +1023,7 @@ function renderDailyMetricWindScatter(rows, weatherHourly, metric, weatherMetric
     // `kpiCurrent` is set earlier to latest measurement; keep other KPIs below
     setKpi("kpiAbove25", `${(dailyLimit ? pctAboveDaily.toFixed(0) : 0)}%`);
     setKpi("kpiCorr", corr === null ? "—" : corr.toFixed(2));
+    renderAdvancedAnalytics(rows, weatherHourly, metric, weatherMetric, pointsForAdvanced, lagHours);
   // Determine bins: if annualLimit missing, use a heuristic for "good" threshold
   const goodThreshold = annualLimit ?? (dailyLimit ? Math.round(dailyLimit * 0.4) : null);
   const ok = goodThreshold !== null ? points.filter(p => p.y <= goodThreshold) : [];
@@ -523,9 +1042,9 @@ function renderDailyMetricWindScatter(rows, weatherHourly, metric, weatherMetric
     console.warn(`No daily overlap between ${formatMetricLabel(metric)} and wind.`);
     try {
       console.log('Measurement sample (first 5):', rows.slice(0,5).map(r=>({t:getRowTimestamp(r), v:getRowNumericValue(r)})));
-      console.log('Measurement days:', Array.from(metricDaily.keys()).sort());
+      console.log('Measurement days:', Array.from(new Set((pairedHourly ?? []).map(p => toDayKey(p.ts)))).sort());
       console.log('Weather sample times (first 10):', (weatherHourly?.time ?? []).slice(0, 10));
-      console.log('Weather days:', Array.from(weatherDaily.keys()).sort());
+      console.log('Weather days:', Array.from(new Set((weatherHourly?.time ?? []).map(t => toDayKey(t)))).sort());
     } catch (e) {
       console.warn('Failed to dump debug samples', e);
     }
@@ -580,6 +1099,9 @@ function renderDailyMetricWindScatter(rows, weatherHourly, metric, weatherMetric
   } else if (weatherMetric === 'temperature_2m') {
     xMinAxis = Math.floor(observedXMin) - 2;
     xMaxForChart = Math.ceil(Math.max(...xs)) + 2;
+  } else if (weatherMetric === 'precipitation') {
+    xMinAxis = 0;
+    xMaxForChart = Math.max(1, Math.ceil(Math.max(...xs)));
   } else {
     xMinAxis = Math.max(0, observedXMin - Math.max(1, observedXMin * 0.05));
     xMaxForChart = Math.max(...xs) * 1.1;
@@ -610,11 +1132,13 @@ function renderDailyMetricWindScatter(rows, weatherHourly, metric, weatherMetric
       },
       scales: {
         x: {
-          title: { display: true, text: `Daily mean ${formatWeatherLabel(weatherMetric).toLowerCase()} (${unitForWeather(weatherMetric)})` },
-          beginAtZero: weatherMetric === 'wind_speed_10m',
+          title: { display: true, text: weatherMetric === 'precipitation'
+            ? `Daily total ${formatWeatherLabel(weatherMetric).toLowerCase()}${weatherLagSuffix(lagHours)} (mm/day)`
+            : `Daily mean ${formatWeatherLabel(weatherMetric).toLowerCase()}${weatherLagSuffix(lagHours)} (${unitForWeather(weatherMetric)})` },
+          beginAtZero: weatherMetric === 'wind_speed_10m' || weatherMetric === 'precipitation',
           min: xMinAxis,
           max: xMaxForChart,
-          ticks: { stepSize: weatherMetric === 'wind_speed_10m' ? 5 : 2 }
+          ticks: { stepSize: weatherMetric === 'wind_speed_10m' ? 5 : (weatherMetric === 'precipitation' ? 1 : 2) }
         },
         y: {
           title: { display: true, text: `Daily mean ${formatMetricLabel(metric)} (${unitForMetric(metric)})` },
@@ -722,11 +1246,36 @@ function stationMatchesQuery(station, query) {
   return label.includes(q) || id.includes(q);
 }
 
+function updateStationMatchMeta(totalMatches, shownCount, query = "") {
+  if (!stationMatchMetaEl) return;
+  if (!normalizeSearchText(query)) {
+    stationMatchMetaEl.textContent = "";
+    return;
+  }
+  if (totalMatches === 0) {
+    stationMatchMetaEl.textContent = "No matches";
+    return;
+  }
+  stationMatchMetaEl.textContent = totalMatches > shownCount
+    ? `${shownCount}/${totalMatches} matches`
+    : `${totalMatches} matches`;
+}
+
 function renderStationOptions(stations, query = "", preferredStationId = "") {
   if (!stationEl) return { totalMatches: 0, shownCount: 0 };
 
   const matching = (Array.isArray(stations) ? stations : []).filter(s => stationMatchesQuery(s, query));
   const visible = matching.slice(0, MAX_STATION_OPTIONS);
+
+  // Keep the currently selected station visible even when it would fall outside the capped list.
+  if (preferredStationId) {
+    const preferred = matching.find(s => String(getStationId(s)) === String(preferredStationId));
+    const alreadyVisible = visible.some(s => String(getStationId(s)) === String(preferredStationId));
+    if (preferred && !alreadyVisible) {
+      visible.pop();
+      visible.unshift(preferred);
+    }
+  }
 
   stationEl.innerHTML = "";
   for (const s of visible) {
@@ -739,6 +1288,7 @@ function renderStationOptions(stations, query = "", preferredStationId = "") {
   if (visible.length === 0) {
     stationEl.innerHTML = '<option value="">No stations match your search</option>';
     stationEl.value = "";
+    updateStationMatchMeta(0, 0, query);
     return { totalMatches: 0, shownCount: 0 };
   }
 
@@ -751,8 +1301,17 @@ function renderStationOptions(stations, query = "", preferredStationId = "") {
 
   const canKeepPreferred = preferredStationId && visible.some(s => String(getStationId(s)) === String(preferredStationId));
   stationEl.value = canKeepPreferred ? preferredStationId : getStationId(visible[0]);
+  updateStationMatchMeta(matching.length, visible.length, query);
 
-  return { totalMatches: matching.length, shownCount: visible.length };
+  return { totalMatches: matching.length, shownCount: visible.length, selectedStationId: stationEl.value };
+}
+
+function clearStationSearchAndRestoreList() {
+  if (!stationSearchEl || !stationEl) return;
+  const hasQuery = normalizeSearchText(stationSearchEl.value).length > 0;
+  if (!hasQuery) return;
+  stationSearchEl.value = "";
+  renderStationOptions(availableStations, "", stationEl.value);
 }
 
 function filterStationsByKeywords(stations, keywords) {
@@ -822,6 +1381,66 @@ function findBestFormulaForMetric(metric, candidates) {
   return null;
 }
 
+function metricAvailableForStation(metric, rawCandidates) {
+  const target = normalizeMetricKey(metric);
+  const candidates = Array.isArray(rawCandidates) ? rawCandidates : [];
+  return candidates.some(c => normalizeMetricKey(c) === target);
+}
+
+async function availableMetricsForStation(stationId, stationSummary) {
+  const supported = new Set();
+  const componentCandidates = Array.isArray(stationSummary?.components) ? stationSummary.components : [];
+
+  let candidates = componentCandidates;
+  if (candidates.length === 0) {
+    const detail = await getStationDetail(stationId);
+    candidates = Array.isArray(detail?.components) ? detail.components : [];
+  }
+
+  if (candidates.length === 0) {
+    candidates = await getStationFormulas(stationId);
+  }
+
+  for (const opt of Array.from(metricEl?.options ?? [])) {
+    if (metricAvailableForStation(opt.value, candidates)) supported.add(opt.value);
+  }
+  return supported;
+}
+
+async function updateMetricOptionsForStation(stationId, stationSummary, { setStatusOnSwitch = false } = {}) {
+  if (!metricEl) return { changed: false };
+
+  const supported = await availableMetricsForStation(stationId, stationSummary);
+  const hasAvailabilityInfo = supported.size > 0;
+  const before = metricEl.value;
+
+  for (const opt of metricEl.options) {
+    const unavailable = hasAvailabilityInfo ? !supported.has(opt.value) : false;
+    const base = metricBaseLabels.get(opt.value) ?? opt.value;
+    opt.disabled = unavailable;
+    opt.textContent = unavailable ? `${base} (Unavailable at station)` : base;
+  }
+
+  if (metricEl.selectedOptions[0]?.disabled) {
+    const firstEnabled = Array.from(metricEl.options).find(o => !o.disabled);
+    if (firstEnabled) metricEl.value = firstEnabled.value;
+  }
+
+  const changed = before !== metricEl.value;
+  if (changed && setStatusOnSwitch) {
+    setStatus(`Station does not provide ${before}. Switched to ${metricEl.value}.`);
+  }
+  return { changed, supported };
+}
+
+async function syncMetricOptionsForSelectedStation(setStatusOnSwitch = false) {
+  if (!stationEl) return;
+  const stationId = stationEl.value;
+  if (!stationId) return;
+  const stationSummary = availableStations.find(s => String(getStationId(s)) === String(stationId)) ?? null;
+  await updateMetricOptionsForStation(stationId, stationSummary, { setStatusOnSwitch });
+}
+
 function isValidLatitude(v) {
   return Number.isFinite(v) && v >= -90 && v <= 90;
 }
@@ -885,7 +1504,7 @@ async function getWeatherCoordsForStation(stationId, stationSummary) {
 async function queryWeatherMetrics() {
   const lat = 52.0907;
   const lon = 5.1214;
-  const url = `https://archive-api.open-meteo.com/v1/archive?latitude=${lat}&longitude=${lon}&start_date=2025-01-01&end_date=2025-01-02&hourly=temperature_2m,wind_speed_10m`;
+  const url = `https://archive-api.open-meteo.com/v1/archive?latitude=${lat}&longitude=${lon}&start_date=2025-01-01&end_date=2025-01-02&hourly=temperature_2m,wind_speed_10m,precipitation`;
   try {
     const resp = await fetch(url);
     const json = await resp.json();
@@ -900,7 +1519,8 @@ async function queryWeatherMetrics() {
 function formatWeatherLabel(metric) {
   const labels = {
     'wind_speed_10m': 'Wind Speed',
-    'temperature_2m': 'Temperature'
+    'temperature_2m': 'Temperature',
+    'precipitation': 'Precipitation'
   };
   return labels[metric] || metric;
 }
@@ -908,7 +1528,8 @@ function formatWeatherLabel(metric) {
 function unitForWeather(metric) {
   const units = {
     'wind_speed_10m': 'km/h',
-    'temperature_2m': '°C'
+    'temperature_2m': 'deg C',
+    'precipitation': 'mm'
   };
   return units[metric] || '';
 }
@@ -929,7 +1550,7 @@ async function fetchWindHourly(days, coords = DEFAULT_WEATHER_COORDS) {
     `https://archive-api.open-meteo.com/v1/archive` +
     `?latitude=${lat}&longitude=${lon}` +
     `&start_date=${fmt(start)}&end_date=${fmt(end)}` +
-    `&hourly=wind_speed_10m,wind_direction_10m,temperature_2m` +
+    `&hourly=wind_speed_10m,wind_direction_10m,temperature_2m,precipitation` +
     `&wind_speed_unit=kmh` +
     `&timezone=UTC`;
 
@@ -963,7 +1584,8 @@ async function populateStationDropdown() {
     }
 
     const initialQuery = stationSearchEl ? stationSearchEl.value : "";
-    const rendered = renderStationOptions(candidates, initialQuery);
+    const rendered = renderStationOptions(candidates, initialQuery, stationEl?.value ?? "");
+    await syncMetricOptionsForSelectedStation(false);
     setStatus(`Ready. Found ${candidates.length} stations. Showing ${rendered.shownCount}.`);
   } catch (err) {
     if (stationEl) stationEl.innerHTML = '<option value="">Error loading stations</option>';
@@ -972,9 +1594,101 @@ async function populateStationDropdown() {
 }
 
 if (stationSearchEl) {
-  stationSearchEl.addEventListener("input", () => {
+  stationSearchEl.addEventListener("input", async () => {
     const preferredStationId = stationEl ? stationEl.value : "";
-    renderStationOptions(availableStations, stationSearchEl.value, preferredStationId);
+    const rendered = renderStationOptions(availableStations, stationSearchEl.value, preferredStationId);
+    if (rendered.selectedStationId && rendered.selectedStationId !== preferredStationId) {
+      await syncMetricOptionsForSelectedStation(false);
+    }
+  });
+}
+
+if (stationEl) {
+  stationEl.addEventListener("change", async () => {
+    clearStationSearchAndRestoreList();
+    await syncMetricOptionsForSelectedStation(true);
+  });
+}
+
+if (advancedToggleEl) {
+  advancedToggleEl.addEventListener("change", () => {
+    setAdvancedVisibility();
+    if (advancedToggleEl.checked && !latestAdvancedText) {
+      setAdvancedText("Load data to see advanced diagnostics.");
+    }
+  });
+}
+
+if (robustToggleEl) {
+  robustToggleEl.addEventListener("change", () => {
+    rerenderFromLatest("robust mode");
+  });
+}
+
+if (precipDailyModeEl) {
+  precipDailyModeEl.addEventListener("change", () => {
+    if (!latestAdvancedArgs) return;
+    if (latestAdvancedArgs.weatherMetric !== "precipitation") return;
+    const pairedHourly = buildHourlyJoinedPoints(
+      latestAdvancedArgs.rows,
+      latestAdvancedArgs.weatherHourly,
+      latestAdvancedArgs.weatherMetric,
+      latestAdvancedArgs.lagHours ?? 0
+    );
+    const pointsForAdvanced = buildDailyPointsFromPaired(
+      pairedHourly,
+      latestAdvancedArgs.weatherMetric,
+      getAdvancedPrecipMode()
+    );
+    renderAdvancedAnalytics(
+      latestAdvancedArgs.rows,
+      latestAdvancedArgs.weatherHourly,
+      latestAdvancedArgs.metric,
+      latestAdvancedArgs.weatherMetric,
+      pointsForAdvanced,
+      latestAdvancedArgs.lagHours ?? 0
+    );
+  });
+}
+
+if (advancedViewModeEl) {
+  advancedViewModeEl.addEventListener("change", () => {
+    applyAdvancedViewMode();
+    if (latestAdvancedArgs) {
+      renderAdvancedAnalytics(
+        latestAdvancedArgs.rows,
+        latestAdvancedArgs.weatherHourly,
+        latestAdvancedArgs.metric,
+        latestAdvancedArgs.weatherMetric,
+        latestAdvancedArgs.dailyPoints,
+        latestAdvancedArgs.lagHours ?? 0
+      );
+    }
+  });
+}
+
+setAdvancedVisibility();
+updatePrecipDailyControlVisibility();
+applyAdvancedViewMode();
+initHelpButtons();
+
+const weatherMetricEl = document.getElementById("weatherMetric");
+if (weatherMetricEl) {
+  weatherMetricEl.addEventListener("change", () => {
+    updatePrecipDailyControlVisibility();
+    rerenderFromLatest("weather metric");
+  });
+}
+
+if (weatherLagEl) {
+  weatherLagEl.addEventListener("change", () => {
+    rerenderFromLatest("weather lag");
+  });
+}
+
+if (visualSmoothToggleEl) {
+  visualSmoothToggleEl.addEventListener("change", () => {
+    rerenderFromLatest("smooth chart");
   });
 }
 
@@ -987,6 +1701,7 @@ loadBtn.addEventListener("click", async () => {
     const stationId = stationEl.value;
     
     if (!stationId) {
+      clearVisuals();
       setStatus("Please select a station.");
       setLoading(false);
       return;
@@ -994,23 +1709,26 @@ loadBtn.addEventListener("click", async () => {
 
     const chosen = availableStations.find(s => getStationId(s) === stationId);
     if (!chosen) {
+      clearVisuals();
       setStatus("Selected station not found.");
       setLoading(false);
       return;
     }
 
+    await updateMetricOptionsForStation(stationId, chosen, { setStatusOnSwitch: true });
     selectedStation = chosen;
     const days = daysEl.value;
     const metric = metricEl.value;
     const weatherMetric = document.getElementById('weatherMetric').value;
+    const weatherLagHours = getWeatherLagHours();
+    const smoothVisual = !!visualSmoothToggleEl?.checked;
     const weatherCoords = await getWeatherCoordsForStation(stationId, chosen);
 
     if (pageTitle) pageTitle.textContent = `${formatMetricLabel(metric)} in ${getStationLabel(chosen)} (Exploratory)`;
 
     const display = formatMetricLabel(metric);
     const weatherLabel = formatWeatherLabel(weatherMetric);
-    if (hourlyTitleEl) hourlyTitleEl.textContent = `${display} vs ${weatherLabel} (Hourly)`;
-    if (dailyTitleEl) dailyTitleEl.textContent = `${display} vs ${weatherLabel} (Daily Averages)`;
+    updateMetricWeatherTitles(metric, weatherMetric, weatherLagHours);
 
     // Determine which formula to request for this station and metric.
     // Prefer using cached station formulas to avoid extra API calls.
@@ -1040,12 +1758,13 @@ loadBtn.addEventListener("click", async () => {
     // Try in-memory cache first — but only reuse if the most recent measurement is within the last hour
     if (cached.rows && cached.stationId === stationId && String(cached.days) === String(days) && cached.metric === metric && cached.formula === formulaToUse) {
       if (rowsAreFreshWithin(cached.rows, HOUR_MS)) {
-        setStatus(`Using fresh cached ${metric} (${formulaToUse}): ${cached.rows.length} records from ${stationId}. Fetching weather...`);
+        const robustChart = filterRowsForRobustCharts(cached.rows);
+        const robustMsg = robustChart.removed > 0 ? ` Robust mode removed ${robustChart.removed} outlier point(s) from chart views.` : "";
+        setStatus(`Using fresh cached ${metric} (${formulaToUse}): ${cached.rows.length} records from ${stationId}. Fetching weather...${robustMsg}`);
 
         const weatherHourly = await fetchWindHourly(days, weatherCoords);
-        renderMetricChart(cached.rows, weatherHourly, metric, weatherMetric);
-        renderMetricWindScatter(cached.rows, weatherHourly, metric, weatherMetric);
-        renderDailyMetricWindScatter(cached.rows, weatherHourly, metric, weatherMetric);
+        setLatestRenderContext(cached.rows, weatherHourly, metric, weatherMetric, stationId);
+        renderAllCharts(robustChart.rows, weatherHourly, metric, weatherMetric, weatherLagHours, smoothVisual);
 
         setStatus(`Loaded ${cached.rows.length} ${metric} records from ${stationId}. (cached, fresh)`);
         return;
@@ -1057,11 +1776,12 @@ loadBtn.addEventListener("click", async () => {
     const sessionRows = loadFromSessionCache(key);
     if (sessionRows && rowsAreFreshWithin(sessionRows, HOUR_MS)) {
       cached = { stationId, days, metric, formula: formulaToUse, rows: sessionRows };
-      setStatus(`Using session-cached ${metric} (${formulaToUse}): ${sessionRows.length} records from ${stationId}. Fetching weather...`);
+      const robustChart = filterRowsForRobustCharts(sessionRows);
+      const robustMsg = robustChart.removed > 0 ? ` Robust mode removed ${robustChart.removed} outlier point(s) from chart views.` : "";
+      setStatus(`Using session-cached ${metric} (${formulaToUse}): ${sessionRows.length} records from ${stationId}. Fetching weather...${robustMsg}`);
       const weatherHourly = await fetchWindHourly(days, weatherCoords);
-      renderMetricChart(sessionRows, weatherHourly, metric, weatherMetric);
-      renderMetricWindScatter(sessionRows, weatherHourly, metric, weatherMetric);
-      renderDailyMetricWindScatter(sessionRows, weatherHourly, metric, weatherMetric);
+      setLatestRenderContext(sessionRows, weatherHourly, metric, weatherMetric, stationId);
+      renderAllCharts(robustChart.rows, weatherHourly, metric, weatherMetric, weatherLagHours, smoothVisual);
       setStatus(`Loaded ${sessionRows.length} ${metric} records from ${stationId}. (session cache, fresh)`);
       return;
     }
@@ -1081,14 +1801,17 @@ loadBtn.addEventListener("click", async () => {
           if (currentHour > latestHour) {
             setStatus(`New hourly data likely available — fetching fresh data.`);
           } else {
+            clearVisuals();
             setStatus(`Recent request exists for this query (cooldown). Use cached results or wait.`);
             return;
           }
         } else {
+          clearVisuals();
           setStatus(`Recent request exists for this query (cooldown). Use cached results or wait.`);
           return;
         }
       } else {
+        clearVisuals();
         setStatus(`Recent request exists for this query (cooldown). Use cached results or wait.`);
         return;
       }
@@ -1100,6 +1823,11 @@ loadBtn.addEventListener("click", async () => {
     lastRequestTimestamps.set(key, Date.now());
 
     const rows = await getMeasurements(stationId, days, formulaToUse);
+    if (!Array.isArray(rows) || rows.length === 0) {
+      clearVisuals();
+      setStatus(`No ${metric} data available for ${getStationLabel(chosen)} in the selected period.`);
+      return;
+    }
 
     cached = { stationId, days, metric, formula: formulaToUse, rows };
     // save to session cache for reuse during this browser session
@@ -1109,24 +1837,27 @@ loadBtn.addEventListener("click", async () => {
     console.log(`${metric} rows sample:`, rows.slice(0, 5));
 
     const corrLabelEl = document.getElementById('corrLabel');
-    if (corrLabelEl) corrLabelEl.textContent = `${weatherLabel.toLowerCase()}–pollutant correlation (daily)`;
+    if (corrLabelEl) corrLabelEl.textContent = `${weatherLabel.toLowerCase()}${weatherLagSuffix(weatherLagHours)}–pollutant correlation (daily)`;
     
     const weatherHourly = await fetchWindHourly(days, weatherCoords);
     console.log('Selected weather metric:', weatherMetric);
     console.log('Weather hourly keys:', Object.keys(weatherHourly).slice(0, 5));
     console.log('Sample temperature data:', weatherHourly.temperature_2m?.slice(0, 5));
     console.log('Sample wind data:', weatherHourly.wind_speed_10m?.slice(0, 5));
-    renderMetricChart(rows, weatherHourly, metric, weatherMetric);
-    renderMetricWindScatter(rows, weatherHourly, metric, weatherMetric);
-    renderDailyMetricWindScatter(rows, weatherHourly, metric, weatherMetric);
+    const robustChart = filterRowsForRobustCharts(rows);
+    setLatestRenderContext(rows, weatherHourly, metric, weatherMetric, stationId);
+    renderAllCharts(robustChart.rows, weatherHourly, metric, weatherMetric, weatherLagHours, smoothVisual);
 
-    setStatus(`Loaded ${rows.length} ${metric} records from ${stationId}.`);
+    clearStationSearchAndRestoreList();
+    const robustMsg = robustChart.removed > 0 ? ` Robust mode removed ${robustChart.removed} outlier point(s) from chart views.` : "";
+    setStatus(`Loaded ${rows.length} ${metric} records from ${stationId}.${robustMsg}`);
 
     console.log("Chosen station:", chosen);
     console.log(`${metric} rows sample:`, rows.slice(0, 5));
 
   } catch (err) {
     console.error(err);
+    clearVisuals();
     setStatus(`Error: ${err.message}`);
   }
   finally {
@@ -1136,6 +1867,9 @@ loadBtn.addEventListener("click", async () => {
 
 // Populate station dropdown when page loads
 window.addEventListener('load', populateStationDropdown);
+
+
+
 
 
 

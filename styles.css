@@ -80,6 +80,10 @@ h2 {
   display: grid;
   gap: 10px;
   margin: 10px 0 8px;
+  padding: 10px 12px;
+  border: 1px solid rgba(0,0,0,0.07);
+  border-radius: 12px;
+  background: rgba(255,255,255,0.8);
 }
 
 .controlsRow {
@@ -89,11 +93,11 @@ h2 {
 }
 
 .controlsRowTop {
-  grid-template-columns: auto auto minmax(180px, 260px);
+  grid-template-columns: minmax(130px, 180px) minmax(110px, 160px) minmax(180px, 220px);
 }
 
 .controlsRowBottom {
-  grid-template-columns: minmax(320px, 1fr) auto auto;
+  grid-template-columns: minmax(210px, 1.2fr) minmax(120px, 165px) minmax(120px, 155px) auto auto auto;
 }
 
 .controlField {
@@ -107,10 +111,90 @@ h2 {
   font-size: 13px;
 }
 
+.labelWithHelp {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.helpBtn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 16px;
+  width: 16px;
+  height: 16px;
+  border: 1px solid rgba(0,0,0,0.25);
+  border-radius: 50%;
+  background: #fff;
+  color: rgba(0,0,0,0.75);
+  font-size: 11px;
+  line-height: 16px;
+  padding: 0;
+  cursor: help;
+  vertical-align: middle;
+}
+
+.helpBtn:hover {
+  background: rgba(0,0,0,0.04);
+}
+
+.helpPopover {
+  position: absolute;
+  z-index: 20;
+  min-width: 220px;
+  max-width: 320px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(0,0,0,0.2);
+  background: #fff;
+  color: #222;
+  font-size: 12px;
+  line-height: 1.35;
+  box-shadow: 0 8px 18px rgba(0,0,0,0.14);
+}
+
+.controlHead {
+  display: grid;
+  grid-template-columns: 1fr 92px;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.controlMeta {
+  font-size: 11px;
+  color: rgba(0,0,0,0.6);
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .controls button{
   border: 1px solid rgba(0,0,0,0.12);
   background: #fff;
   border-radius: 10px;
+}
+
+.toggleField {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  align-self: end;
+  padding-bottom: 2px;
+}
+
+.toggleField input {
+  width: 14px;
+  height: 14px;
+}
+
+.toggleLabelWithHelp {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
 }
 .controls select{
   border: 1px solid rgba(0,0,0,0.12);
@@ -128,10 +212,16 @@ h2 {
   padding: 6px 10px;
 }
 
+.controls .helpBtn {
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(0,0,0,0.25);
+}
+
 #stationSearch {
   width: 100%;
   min-width: 0;
-  max-width: 260px;
+  max-width: 220px;
 }
 
 #station {
@@ -148,6 +238,96 @@ h2 {
   white-space: pre-wrap; /* if status gets longer */
 }
 
+.advancedPanel {
+  margin: 8px 0 14px;
+  border: 1px solid rgba(0,0,0,0.08);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: rgba(0,0,0,0.02);
+}
+
+.advancedPanel h2 {
+  margin: 0 0 8px;
+  font-size: 15px;
+}
+
+.advancedHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.advancedHead h2 {
+  margin: 0;
+}
+
+.advancedControls {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.advancedControl {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.advancedControl select {
+  font-size: 12px;
+  padding: 3px 6px;
+  border: 1px solid rgba(0,0,0,0.12);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.advancedToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+#robustToggle {
+  width: 14px;
+  height: 14px;
+}
+
+#advancedStats {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.35;
+  white-space: pre-wrap;
+  background: transparent;
+}
+
+.advancedTableWrap {
+  overflow-x: auto;
+}
+
+.advancedTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.advancedTable th,
+.advancedTable td {
+  border-bottom: 1px solid rgba(0,0,0,0.08);
+  padding: 6px 8px;
+  text-align: left;
+  vertical-align: top;
+  white-space: nowrap;
+}
+
+.advancedTable th {
+  font-weight: 600;
+  background: rgba(0,0,0,0.03);
+}
+
 
 .chartWrap {
   margin-top: 8px;
@@ -159,6 +339,9 @@ h2 {
 
 .chart-block {
   overflow-x: hidden;
+  margin-top: 12px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(0,0,0,0.07);
 }
 
 .chart-container {
@@ -190,6 +373,10 @@ h2 {
        margin-top: 14px; }
   .controlsRowTop,
   .controlsRowBottom { grid-template-columns: 1fr; }
+  .toggleField { align-self: start; }
+  .advancedHead { flex-direction: column; align-items: flex-start; }
+  .advancedControls { flex-direction: column; align-items: flex-start; gap: 8px; }
+  #loadBtn { width: 100%; }
   .chartWrap{ margin-top: 6px;}
   .chart-container { height: 260px; }
   #stationSearch { min-width: 0; width: 100%; }
