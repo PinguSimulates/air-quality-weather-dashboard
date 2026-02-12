@@ -59,6 +59,11 @@ h2 {
   line-height: 1.1;
 }
 
+/* KPI health states — colored left border to match daily scatter chart */
+.kpiGood { border-left: 4px solid rgba(34,197,94,1); padding-left: 10px; }
+.kpiElevated { border-left: 4px solid rgba(234,179,8,1); padding-left: 10px; }
+.kpiHigh { border-left: 4px solid rgba(239,68,68,1); padding-left: 10px; }
+
 .kpiLabel{
   font-size: 12px;
   opacity: 0.75;
@@ -123,12 +128,19 @@ h2 {
   overflow-x: hidden;
 }
 
-.chart-block canvas {
-  width: 100% !important;
-  height: 320px !important;
+.chart-container {
+  position: relative;
+  width: 100%;
+  height: 320px;
 }
 
-.chart-tall canvas { height: 380px !important; }
+.chart-tall .chart-container {
+  height: 380px;
+}
+
+.chart-container canvas {
+  display: block;
+}
 
 
 /* Responsive canvas height */
@@ -144,5 +156,5 @@ h2 {
   h2 { font-size: 16px;
        margin-top: 14px; }
   .chartWrap{ margin-top: 6px;}
-  .chartWrap canvas { height: 260px !important; }
+  .chart-container { height: 260px; }
 }

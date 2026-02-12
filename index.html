@@ -11,21 +11,48 @@
     <body>
 
     <div class="container">
-        <h1>NO<sub>2</sub> in Utrecht (Exploratory)</h1>
+        <h1 id="pageTitle">Air Quality Dashboard</h1>
 
         <p class="subtitle">
-        Live NO₂ (Luchtmeetnet) + wind (Open-Meteo). Explore dispersion patterns by hour and by day.
+        Live pollutant (Luchtmeetnet) + wind (Open-Meteo). Explore dispersion patterns by hour and by day.
         </p>
 
-        <section id="controls">
+        <section class="controls">
             <label>
             Days:
             <select id="days">
-                <option value="30">30</option>
-                <option value="90" selected>90</option>
-                <option value="180">180</option>
+                <option value="7">Past 7 days</option>
+                <option value="30">Past 30 days</option>
+                <option value="60">Past 60 days</option>
+                <option value="90" selected>Past 90 days</option>
             </select>
             </label>
+
+            <label>
+            Metric:
+            <select id="metric">
+                <option value="NO2" selected>NO2</option>
+                <option value="O3">O3</option>
+                <option value="PM10">PM10</option>
+                <option value="PM2_5">PM2.5</option>
+            </select>
+            </label>
+
+            <label>
+            Station:
+            <select id="station">
+                <option value="">-- Loading stations --</option>
+            </select>
+            </label>
+
+            <label>
+            Weather metric:
+            <select id="weatherMetric">
+                <option value="wind_speed_10m" selected>Wind Speed</option>
+                <option value="temperature_2m">Temperature</option>
+            </select>
+            </label>
+
             <button id="loadBtn">Load data</button>
         </section>
 
@@ -35,8 +62,8 @@
 
         <section id="insights" class="insights">
             <div class="insight">
-                <div class="kpi" id="kpiDays">—</div>
-                <div class="kpiLabel">Days analysed</div>
+                <div class="kpi" id="kpiCurrent">—</div>
+                <div class="kpiLabel">Latest reading</div>
             </div>
             <div class="insight">
                 <div class="kpi" id="kpiAbove25">—</div>
@@ -44,22 +71,28 @@
             </div>
             <div class="insight">
                 <div class="kpi" id="kpiCorr">—</div>
-                <div class="kpiLabel">Wind-NO₂ correlation (daily) </div>
+                <div class="kpiLabel"><span id="corrLabel">Wind–pollutant correlation (daily)</span></div>
             </div>
         </section>
 
         <section class="chart-block chart-tall">
-            <canvas id="chart"></canvas>
+            <div class="chart-container">
+                <canvas id="chart"></canvas>
+            </div>
         </section>
 
         <section class="chart-block">
-            <h2>NO₂ vs Wind Speed (Hourly)</h2>
-            <canvas id="scatterChart"></canvas>
+            <h2 id="hourlyTitle">Metric vs Wind Speed (Hourly)</h2>
+            <div class="chart-container">
+                <canvas id="scatterChart"></canvas>
+            </div>
         </section>
 
         <section class="chart-block">
-            <h2>NO₂ vs Wind Speed (Daily Averages)</h2>
-            <canvas id="dailyScatterChart"></canvas>
+            <h2 id="dailyTitle">Metric vs Wind Speed (Daily Averages)</h2>
+            <div class="chart-container">
+                <canvas id="dailyScatterChart"></canvas>
+            </div>
         </section>
     </div>
 
