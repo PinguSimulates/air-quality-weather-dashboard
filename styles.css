@@ -77,11 +77,34 @@ h2 {
 
 
 .controls {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
   gap: 10px;
-  align-items: center;
   margin: 10px 0 8px;
+}
+
+.controlsRow {
+  display: grid;
+  gap: 10px;
+  align-items: end;
+}
+
+.controlsRowTop {
+  grid-template-columns: auto auto minmax(180px, 260px);
+}
+
+.controlsRowBottom {
+  grid-template-columns: minmax(320px, 1fr) auto auto;
+}
+
+.controlField {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.controlField span {
+  font-size: 13px;
 }
 
 .controls button{
@@ -103,6 +126,16 @@ h2 {
 .controls select, .controls input, .controls button {
   font-size: 14px;
   padding: 6px 10px;
+}
+
+#stationSearch {
+  width: 100%;
+  min-width: 0;
+  max-width: 260px;
+}
+
+#station {
+  width: 100%;
 }
 
 #status{
@@ -155,6 +188,9 @@ h2 {
   h1 { font-size: 22px; }
   h2 { font-size: 16px;
        margin-top: 14px; }
+  .controlsRowTop,
+  .controlsRowBottom { grid-template-columns: 1fr; }
   .chartWrap{ margin-top: 6px;}
   .chart-container { height: 260px; }
+  #stationSearch { min-width: 0; width: 100%; }
 }

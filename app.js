@@ -2,6 +2,8 @@ const statusEl = document.getElementById("status");
 const loadBtn = document.getElementById("loadBtn");
 const daysEl = document.getElementById("days");
 const metricEl = document.getElementById("metric");
+const stationEl = document.getElementById("station");
+const stationSearchEl = document.getElementById("stationSearch");
 const pageTitle = document.getElementById("pageTitle");
 const hourlyTitleEl = document.getElementById("hourlyTitle");
 const dailyTitleEl = document.getElementById("dailyTitle");
@@ -20,6 +22,8 @@ const REQUEST_COOLDOWN_MS = 5 * 60 * 1000; // don't re-request same query within
 const SESSION_CACHE_TTL_MS = 10 * 60 * 1000; // keep session cache for 10 minutes
 const lastRequestTimestamps = new Map(); // key -> timestamp
 const stationFormulasCache = new Map(); // stationId -> [formulas]
+const stationDetailsCache = new Map(); // stationId -> station detail payload
+const MAX_STATION_OPTIONS = 50;
 const HOUR_MS = 60 * 60 * 1000; // one hour
 
 function cacheKey(stationId, metric, days, formula) {
@@ -67,6 +71,8 @@ function setLoading(isLoading) {
   if (loadBtn) loadBtn.disabled = isLoading;
   if (metricEl) metricEl.disabled = isLoading;
   if (daysEl) daysEl.disabled = isLoading;
+  if (stationEl) stationEl.disabled = isLoading;
+  if (stationSearchEl) stationSearchEl.disabled = isLoading;
 }
 
 // 00 HELPERS FOR STATS CALCULATIONS
@@ -704,6 +710,51 @@ function getStationId(s) {
   return s.number ?? s.code ?? s.id ?? s.station_code;
 }
 
+function normalizeSearchText(s) {
+  return String(s ?? "").toLowerCase().trim();
+}
+
+function stationMatchesQuery(station, query) {
+  if (!query) return true;
+  const q = normalizeSearchText(query);
+  const label = normalizeSearchText(getStationLabel(station));
+  const id = normalizeSearchText(getStationId(station));
+  return label.includes(q) || id.includes(q);
+}
+
+function renderStationOptions(stations, query = "", preferredStationId = "") {
+  if (!stationEl) return { totalMatches: 0, shownCount: 0 };
+
+  const matching = (Array.isArray(stations) ? stations : []).filter(s => stationMatchesQuery(s, query));
+  const visible = matching.slice(0, MAX_STATION_OPTIONS);
+
+  stationEl.innerHTML = "";
+  for (const s of visible) {
+    const opt = document.createElement("option");
+    opt.value = getStationId(s);
+    opt.textContent = `${getStationLabel(s)} (${getStationId(s)})`;
+    stationEl.appendChild(opt);
+  }
+
+  if (visible.length === 0) {
+    stationEl.innerHTML = '<option value="">No stations match your search</option>';
+    stationEl.value = "";
+    return { totalMatches: 0, shownCount: 0 };
+  }
+
+  if (matching.length > visible.length) {
+    const extraOpt = document.createElement("option");
+    extraOpt.disabled = true;
+    extraOpt.textContent = `+ ${matching.length - visible.length} more... refine search`;
+    stationEl.appendChild(extraOpt);
+  }
+
+  const canKeepPreferred = preferredStationId && visible.some(s => String(getStationId(s)) === String(preferredStationId));
+  stationEl.value = canKeepPreferred ? preferredStationId : getStationId(visible[0]);
+
+  return { totalMatches: matching.length, shownCount: visible.length };
+}
+
 function filterStationsByKeywords(stations, keywords) {
   return stations.filter(s => {
     const txt = JSON.stringify(s).toLowerCase();
@@ -771,6 +822,63 @@ function findBestFormulaForMetric(metric, candidates) {
   return null;
 }
 
+function isValidLatitude(v) {
+  return Number.isFinite(v) && v >= -90 && v <= 90;
+}
+
+function isValidLongitude(v) {
+  return Number.isFinite(v) && v >= -180 && v <= 180;
+}
+
+function extractCoordsFromStation(station) {
+  if (!station || typeof station !== "object") return null;
+
+  // GeoJSON convention in station details: geometry.coordinates = [lon, lat]
+  const geo = station.geometry?.coordinates;
+  if (Array.isArray(geo) && geo.length >= 2) {
+    const lon = Number(geo[0]);
+    const lat = Number(geo[1]);
+    if (isValidLatitude(lat) && isValidLongitude(lon)) return { lat, lon };
+  }
+
+  const latCandidates = [station.latitude, station.lat, station.y, station.geometry?.lat];
+  const lonCandidates = [station.longitude, station.lon, station.lng, station.x, station.geometry?.lon];
+  const lat = latCandidates.map(Number).find(isValidLatitude);
+  const lon = lonCandidates.map(Number).find(isValidLongitude);
+  if (isValidLatitude(lat) && isValidLongitude(lon)) return { lat, lon };
+
+  return null;
+}
+
+async function getStationDetail(stationId) {
+  if (!stationId) return null;
+  if (stationDetailsCache.has(stationId)) return stationDetailsCache.get(stationId);
+
+  try {
+    const json = await fetchJson(`${BASE}/stations/${encodeURIComponent(stationId)}`);
+    const detail = json?.data ?? json ?? null;
+    stationDetailsCache.set(stationId, detail);
+    return detail;
+  } catch (err) {
+    console.warn(`Failed to fetch station details for ${stationId}:`, err);
+    stationDetailsCache.set(stationId, null);
+    return null;
+  }
+}
+
+const DEFAULT_WEATHER_COORDS = { lat: 52.0907, lon: 5.1214 }; // Utrecht fallback
+
+async function getWeatherCoordsForStation(stationId, stationSummary) {
+  const fromSummary = extractCoordsFromStation(stationSummary);
+  if (fromSummary) return { ...fromSummary, source: "summary" };
+
+  const detail = await getStationDetail(stationId);
+  const fromDetail = extractCoordsFromStation(detail);
+  if (fromDetail) return { ...fromDetail, source: "station" };
+
+  return { ...DEFAULT_WEATHER_COORDS, source: "default" };
+}
+
 // 03 Fetching wind/weather data 
 
 // Query Open-Meteo for available metrics (run in console: queryWeatherMetrics())
@@ -805,9 +913,11 @@ function unitForWeather(metric) {
   return units[metric] || '';
 }
 
-async function fetchWindHourly(days) {
-  const lat = 52.0907;
-  const lon = 5.1214;
+async function fetchWindHourly(days, coords = DEFAULT_WEATHER_COORDS) {
+  const latCandidate = Number(coords?.lat);
+  const lonCandidate = Number(coords?.lon);
+  const lat = isValidLatitude(latCandidate) ? latCandidate : DEFAULT_WEATHER_COORDS.lat;
+  const lon = isValidLongitude(lonCandidate) ? lonCandidate : DEFAULT_WEATHER_COORDS.lon;
 
   const end = new Date();
   const start = new Date();
@@ -838,36 +948,34 @@ async function fetchWindHourly(days) {
 
 // Populate station dropdown on page load
 async function populateStationDropdown() {
-  const stationEl = document.getElementById('station');
   try {
     setStatus("Fetching station list...");
     const stations = await getAllStations();
-    const keywords = ["utrecht", "de bilt", "bilthoven", "zeist"];
-    const candidates = filterStationsByKeywords(stations, keywords);
-    
+    const candidates = Array.isArray(stations) ? stations.filter(Boolean) : [];
+    candidates.sort((a, b) => String(getStationLabel(a)).localeCompare(String(getStationLabel(b))));
+
     availableStations = candidates;
-    stationEl.innerHTML = '';
     
     if (candidates.length === 0) {
-      stationEl.innerHTML = '<option value="">No stations found</option>';
+      if (stationEl) stationEl.innerHTML = '<option value="">No stations found</option>';
       setStatus("No stations found");
       return;
     }
-    
-    candidates.forEach(s => {
-      const opt = document.createElement('option');
-      opt.value = getStationId(s);
-      opt.textContent = getStationLabel(s);
-      stationEl.appendChild(opt);
-    });
-    
-    // Select first by default
-    stationEl.value = getStationId(candidates[0]);
-    setStatus(`Ready. Found ${candidates.length} stations.`);
+
+    const initialQuery = stationSearchEl ? stationSearchEl.value : "";
+    const rendered = renderStationOptions(candidates, initialQuery);
+    setStatus(`Ready. Found ${candidates.length} stations. Showing ${rendered.shownCount}.`);
   } catch (err) {
-    stationEl.innerHTML = '<option value="">Error loading stations</option>';
+    if (stationEl) stationEl.innerHTML = '<option value="">Error loading stations</option>';
     setStatus(`Error loading stations: ${err.message}`);
   }
+}
+
+if (stationSearchEl) {
+  stationSearchEl.addEventListener("input", () => {
+    const preferredStationId = stationEl ? stationEl.value : "";
+    renderStationOptions(availableStations, stationSearchEl.value, preferredStationId);
+  });
 }
 
 // 04 EVENT LISTENER, WHEN PRESSING LOAD DATA ITS TRIGGERED
@@ -876,7 +984,6 @@ loadBtn.addEventListener("click", async () => {
   try {
     setLoading(true);
     console.log('Load button clicked. Weather dropdown value:', document.getElementById('weatherMetric').value);
-    const stationEl = document.getElementById('station');
     const stationId = stationEl.value;
     
     if (!stationId) {
@@ -896,6 +1003,7 @@ loadBtn.addEventListener("click", async () => {
     const days = daysEl.value;
     const metric = metricEl.value;
     const weatherMetric = document.getElementById('weatherMetric').value;
+    const weatherCoords = await getWeatherCoordsForStation(stationId, chosen);
 
     if (pageTitle) pageTitle.textContent = `${formatMetricLabel(metric)} in ${getStationLabel(chosen)} (Exploratory)`;
 
@@ -934,7 +1042,7 @@ loadBtn.addEventListener("click", async () => {
       if (rowsAreFreshWithin(cached.rows, HOUR_MS)) {
         setStatus(`Using fresh cached ${metric} (${formulaToUse}): ${cached.rows.length} records from ${stationId}. Fetching weather...`);
 
-        const weatherHourly = await fetchWindHourly(days);
+        const weatherHourly = await fetchWindHourly(days, weatherCoords);
         renderMetricChart(cached.rows, weatherHourly, metric, weatherMetric);
         renderMetricWindScatter(cached.rows, weatherHourly, metric, weatherMetric);
         renderDailyMetricWindScatter(cached.rows, weatherHourly, metric, weatherMetric);
@@ -950,7 +1058,7 @@ loadBtn.addEventListener("click", async () => {
     if (sessionRows && rowsAreFreshWithin(sessionRows, HOUR_MS)) {
       cached = { stationId, days, metric, formula: formulaToUse, rows: sessionRows };
       setStatus(`Using session-cached ${metric} (${formulaToUse}): ${sessionRows.length} records from ${stationId}. Fetching weather...`);
-      const weatherHourly = await fetchWindHourly(days);
+      const weatherHourly = await fetchWindHourly(days, weatherCoords);
       renderMetricChart(sessionRows, weatherHourly, metric, weatherMetric);
       renderMetricWindScatter(sessionRows, weatherHourly, metric, weatherMetric);
       renderDailyMetricWindScatter(sessionRows, weatherHourly, metric, weatherMetric);
@@ -1003,7 +1111,7 @@ loadBtn.addEventListener("click", async () => {
     const corrLabelEl = document.getElementById('corrLabel');
     if (corrLabelEl) corrLabelEl.textContent = `${weatherLabel.toLowerCase()}–pollutant correlation (daily)`;
     
-    const weatherHourly = await fetchWindHourly(days);
+    const weatherHourly = await fetchWindHourly(days, weatherCoords);
     console.log('Selected weather metric:', weatherMetric);
     console.log('Weather hourly keys:', Object.keys(weatherHourly).slice(0, 5));
     console.log('Sample temperature data:', weatherHourly.temperature_2m?.slice(0, 5));

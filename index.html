@@ -18,42 +18,51 @@
         </p>
 
         <section class="controls">
-            <label>
-            Days:
-            <select id="days">
-                <option value="7">Past 7 days</option>
-                <option value="30">Past 30 days</option>
-                <option value="60">Past 60 days</option>
-                <option value="90" selected>Past 90 days</option>
-            </select>
-            </label>
+            <div class="controlsRow controlsRowTop">
+                <label class="controlField">
+                <span>Days:</span>
+                <select id="days">
+                    <option value="7">Past 7 days</option>
+                    <option value="30">Past 30 days</option>
+                    <option value="60">Past 60 days</option>
+                    <option value="90" selected>Past 90 days</option>
+                </select>
+                </label>
 
-            <label>
-            Metric:
-            <select id="metric">
-                <option value="NO2" selected>NO2</option>
-                <option value="O3">O3</option>
-                <option value="PM10">PM10</option>
-                <option value="PM2_5">PM2.5</option>
-            </select>
-            </label>
+                <label class="controlField">
+                <span>Metric:</span>
+                <select id="metric">
+                    <option value="NO2" selected>NO2</option>
+                    <option value="O3">O3</option>
+                    <option value="PM10">PM10</option>
+                    <option value="PM2_5">PM2.5</option>
+                </select>
+                </label>
 
-            <label>
-            Station:
-            <select id="station">
-                <option value="">-- Loading stations --</option>
-            </select>
-            </label>
+                <label class="controlField">
+                <span>Station search:</span>
+                <input id="stationSearch" type="search" placeholder="Type station name or ID" />
+                </label>
+            </div>
 
-            <label>
-            Weather metric:
-            <select id="weatherMetric">
-                <option value="wind_speed_10m" selected>Wind Speed</option>
-                <option value="temperature_2m">Temperature</option>
-            </select>
-            </label>
+            <div class="controlsRow controlsRowBottom">
+                <label class="controlField">
+                <span>Station:</span>
+                <select id="station">
+                    <option value="">-- Loading stations --</option>
+                </select>
+                </label>
 
-            <button id="loadBtn">Load data</button>
+                <label class="controlField">
+                <span>Weather metric:</span>
+                <select id="weatherMetric">
+                    <option value="wind_speed_10m" selected>Wind Speed</option>
+                    <option value="temperature_2m">Temperature</option>
+                </select>
+                </label>
+
+                <button id="loadBtn">Load data</button>
+            </div>
         </section>
 
         <pre id="status">Ready.</pre>
