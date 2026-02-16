@@ -1,3 +1,16 @@
+/*
+  Air Quality + Weather Dashboard styles
+
+  Quick navigation:
+  [C1] Tokens and base layout
+  [C2] KPI cards
+  [C3] Controls and helpers
+  [C4] Status and advanced diagnostics
+  [C5] Chart containers
+  [C6] Responsive overrides
+*/
+
+/* [C1] Tokens and base layout */
 :root {
   --maxw: 980px;
 }
@@ -38,6 +51,7 @@ h2 {
   font-size: 14px;
 }
 
+/* [C2] KPI cards */
 .insights {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
@@ -73,9 +87,7 @@ h2 {
 @media (max-width: 600px){
   .insights{ grid-template-columns: 1fr; }
 }
-
-
-
+/* [C3] Controls and helpers */
 .controls {
   display: grid;
   gap: 10px;
@@ -228,6 +240,7 @@ h2 {
   width: 100%;
 }
 
+/* [C4] Status and advanced diagnostics */
 #status{
   background: rgba(0,0,0,0.04);
   border: 1px solid rgba(0,0,0,0.06);
@@ -328,7 +341,7 @@ h2 {
   background: rgba(0,0,0,0.03);
 }
 
-
+/* [C5] Chart containers */
 .chartWrap {
   margin-top: 8px;
   padding: 10px 10px 6px;
@@ -358,13 +371,13 @@ h2 {
   display: block;
 }
 
-
 /* Responsive canvas height */
 .chartWrap canvas {
   width: 100% !important;
   height: 320px !important;
 }
 
+/* [C6] Responsive overrides */
 @media (max-width: 600px) {
   body { padding: 12px; }
   .container { padding: 14px; border-radius: 14px; }

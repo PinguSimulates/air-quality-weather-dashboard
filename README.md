@@ -1,47 +1,81 @@
-# NO₂ in Utrecht — Live Air Quality + Wind Dashboard
+# Air Quality + Weather Dashboard
 
-Interactive dashboard exploring how local wind conditions relate to roadside NO₂ levels in Utrecht.
+Interactive browser dashboard for exploring relationships between air pollution and weather across Dutch monitoring stations.
 
-**Why this matters:** NO₂ is a key traffic-related pollutant. Wind affects dispersion, so overlaying NO₂ with wind speed helps reveal when/why higher concentrations occur.
+## What this project does
 
-## Why this project exists
+- Pulls near-real-time air quality measurements from Luchtmeetnet
+- Pulls hourly weather history from Open-Meteo
+- Lets you explore multiple pollutant metrics:
+  - `NO2`
+  - `O3`
+  - `PM10`
+  - `PM2.5`
+- Lets you compare against multiple weather variables:
+  - wind speed
+  - temperature
+  - precipitation
+- Supports weather lag analysis (same hour, 1h, 3h, 6h, 12h, 24h earlier)
+- Includes station search and station-specific metric availability handling
 
-This dashboard explores how **wind-driven dispersion** affects roadside NO₂ concentrations in Utrecht.
+## Visuals and analysis
 
-Rather than static reporting, it focuses on **pattern discovery**:
-- When does wind meaningfully reduce NO₂?
-- How noisy is the hourly signal vs daily averages?
-- How often do levels exceed health-based guidelines?
+The dashboard renders three linked views:
 
-The goal is not prediction, but **understanding**.
+1. Hourly time series (pollutant + weather overlay)
+2. Hourly scatter plot (weather vs pollutant)
+3. Daily scatter plot (daily weather vs daily pollutant mean)
 
-## What it does
-- Fetches **live / near-real-time** NO₂ measurements from the Dutch air-quality network (Luchtmeetnet)
-- Fetches **hourly wind speed** from Open-Meteo for the Utrecht area
-- Visualizes:
-  1) NO₂ time series + wind overlay (hourly)
-  2) Hourly scatter: **NO₂ vs wind speed**
-  3) Daily averages scatter (color-coded by WHO guideline thresholds)
-- Computes quick “Insights” KPIs (overlap days, % days > 25 µg/m³, correlation)
+It also provides:
+
+- KPI cards (latest reading, % days above WHO daily guideline, daily correlation)
+- WHO-threshold color coding in the daily scatter
+- Optional visual smoothing for clearer trend inspection
+- Advanced diagnostics mode with:
+  - Pearson and Spearman correlations
+  - p-values
+  - confidence intervals
+  - segment breakdowns (rush hour, non-rush, weekday, weekend)
+  - robust mode (top 1% winsorization)
 
 ## Data sources
-- NO₂: Luchtmeetnet Open Data API (`api.luchtmeetnet.nl`)
-- Wind: Open-Meteo Archive API (`archive-api.open-meteo.com`)
 
-## How to run locally
-1. Clone the repo
-2. Serve locally (example):
-   - VS Code Live Server, or
-   - any local static server
-3. Open in browser and click **Load data**
+- Air quality: Luchtmeetnet Open Data API (`api.luchtmeetnet.nl`)
+- Weather: Open-Meteo Archive API (`archive-api.open-meteo.com`)
 
-## Notes / limitations
-- Correlation ≠ causation (traffic cycles, boundary layer height, chemistry, etc.)
-- Wind is taken from a coordinate near Utrecht (not exactly the roadside sensor location)
-- Station selection is currently keyword-based (Utrecht/nearby)
+## Tech stack
 
-## Next ideas
-- Add wind direction (source vs dispersion)
-- Add day-of-week / rush-hour stratification
-- Add precipitation / temperature overlays
-- Maybe clean up/better organise the code if planning to iterate more and expand capability
+- HTML
+- CSS
+- Vanilla JavaScript
+- Chart.js + Luxon adapter
+
+## Architecture
+
+The app is split by responsibility to keep changes localized:
+
+- `js/core.js`: shared state, DOM references, utility/statistical helpers
+- `js/charts.js`: all chart rendering, KPI updates, and analytics view rendering
+- `js/data.js`: API access, station/metric availability logic, weather coordinate handling
+- `js/app.js`: event listeners and load workflow orchestration
+
+## Run locally
+
+1. Clone this repository
+2. Start a local static server (for example VS Code Live Server)
+3. Open `index.html` in your browser through that server
+4. Select station/metric/weather options and click **Load data**
+
+## Scope and limitations
+
+- This is an exploratory correlation dashboard, not a forecasting model
+- Correlation does not imply causation
+- Data quality and station coverage depend on upstream APIs
+- Weather is mapped by station coordinates when available, with a Utrecht fallback
+
+## Roadmap ideas
+
+- Add wind direction into scatter/segment analysis
+- Add export/download of filtered datasets and charts
+- Add basic automated UI smoke tests (Playwright or Cypress)
+- Add automated tests for analytics helpers
