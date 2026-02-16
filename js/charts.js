@@ -27,6 +27,21 @@ const WHO_LIMITS = {
   PM2_5: { daily: 15, annual: 5 }
 };
 
+const CHART_COLORS = {
+  pollutantLine: "rgba(3, 105, 161, 0.95)",
+  pollutantFill: "rgba(3, 105, 161, 0.14)",
+  weatherLine: "rgba(225, 29, 72, 0.9)",
+  weatherFill: "rgba(225, 29, 72, 0.08)",
+  hourlyScatterFill: "rgba(2, 132, 199, 0.55)",
+  hourlyScatterStroke: "rgba(2, 132, 199, 0.9)",
+  dailyGoodFill: "rgba(34, 197, 94, 0.72)",
+  dailyGoodStroke: "rgba(21, 128, 61, 1)",
+  dailyElevatedFill: "rgba(245, 158, 11, 0.72)",
+  dailyElevatedStroke: "rgba(180, 83, 9, 1)",
+  dailyHighFill: "rgba(239, 68, 68, 0.78)",
+  dailyHighStroke: "rgba(185, 28, 28, 1)"
+};
+
 function whoDailyLimit(metric) {
   return WHO_LIMITS[metric]?.daily ?? null;
 }
@@ -81,6 +96,23 @@ function buildDailyPointsFromPaired(pairedHourly, weatherMetric, precipMode = "m
   return points;
 }
 
+function getTimeAxisConfig(daysRaw) {
+  const days = Number(daysRaw);
+  if (!Number.isFinite(days)) {
+    return { unit: "week", maxTicksLimit: 8 };
+  }
+  if (days <= 7) {
+    return { unit: "day", maxTicksLimit: 7 };
+  }
+  if (days <= 30) {
+    return { unit: "week", maxTicksLimit: 6 };
+  }
+  if (days <= 90) {
+    return { unit: "week", maxTicksLimit: 8 };
+  }
+  return { unit: "month", maxTicksLimit: 6 };
+}
+
 // windHourly is optional (pass null/undefined for NO2-only)
 function renderMetricChart(rows, weatherHourly, metric, weatherMetric = 'wind_speed_10m', lagHours = 0, smoothVisual = false) {
   const points = rows
@@ -94,6 +126,7 @@ function renderMetricChart(rows, weatherHourly, metric, weatherMetric = 'wind_sp
 
   const xMin = points[0]?.x?.getTime();
   const xMax = points[points.length - 1]?.x?.getTime();
+  const timeAxis = getTimeAxisConfig(daysEl?.value);
 
   const display = formatMetricLabel(metric);
   const unit = unitForMetric(metric);
@@ -110,7 +143,9 @@ function renderMetricChart(rows, weatherHourly, metric, weatherMetric = 'wind_sp
     data: pollutantPoints,
     yAxisID: "y",
     pointRadius: 0,
-    borderWidth: 1
+    borderWidth: 1.3,
+    borderColor: CHART_COLORS.pollutantLine,
+    backgroundColor: CHART_COLORS.pollutantFill
   }];
 
     if (weatherHourly?.time?.length) {
@@ -133,7 +168,9 @@ function renderMetricChart(rows, weatherHourly, metric, weatherMetric = 'wind_sp
       data: weatherPoints,
       yAxisID: "y1",
       pointRadius: 0,
-      borderWidth: 1
+      borderWidth: 1.2,
+      borderColor: CHART_COLORS.weatherLine,
+      backgroundColor: CHART_COLORS.weatherFill
     });
   }
 
@@ -147,9 +184,12 @@ function renderMetricChart(rows, weatherHourly, metric, weatherMetric = 'wind_sp
       responsive: true,
       maintainAspectRatio: false,
       parsing: false,
-      plugins: { decimation: { enabled: true, algorithm: "min-max" } },
+      plugins: {
+        decimation: { enabled: true, algorithm: "min-max" },
+        legend: { labels: { usePointStyle: true, boxWidth: 12 } }
+      },
       scales: {
-        x: { type: "time", min: xMin, max: xMax, time: { unit: "week" }, ticks: { maxTicksLimit: 8 } },
+        x: { type: "time", min: xMin, max: xMax, time: { unit: timeAxis.unit }, ticks: { maxTicksLimit: timeAxis.maxTicksLimit } },
         y: { beginAtZero: true, min: 0, position: "left", title: { display: true, text: `${display} (${unit})` } },
         y1: weatherHourly?.time?.length ? { beginAtZero: weatherMetric === 'precipitation', position: "right", grid: { drawOnChartArea: false }, title: { display: true, text: `${formatWeatherLabel(weatherMetric)}${weatherLagSuffix(lagHours)} (${unitForWeather(weatherMetric)})` } } : undefined
       }
@@ -276,7 +316,7 @@ function renderMetricWindScatter(rows, weatherHourly, metric, weatherMetric = 'w
 
   scatterChart = new Chart(ctx, {
     type: "scatter",
-    data: { datasets: [{ label: `Hourly ${display} vs ${weatherLabel}${weatherLagSuffix(lagHours)}`, data: points, pointRadius: 2, pointHoverRadius: 4 }] },
+    data: { datasets: [{ label: `Hourly ${display} vs ${weatherLabel}${weatherLagSuffix(lagHours)}`, data: points, pointRadius: 2, pointHoverRadius: 4, backgroundColor: CHART_COLORS.hourlyScatterFill, borderColor: CHART_COLORS.hourlyScatterStroke }] },
     options: {
       responsive: true,
       maintainAspectRatio: false,
@@ -568,22 +608,22 @@ function renderDailyMetricWindScatter(rows, weatherHourly, metric, weatherMetric
       label: goodLabel,
       data: ok,
       pointRadius: 4,
-      backgroundColor: "rgba(34, 197, 94, 0.7)", // green
-      borderColor: "rgba(34, 197, 94, 1)"
+      backgroundColor: CHART_COLORS.dailyGoodFill,
+      borderColor: CHART_COLORS.dailyGoodStroke
     },
     {
       label: borderlineLabel,
       data: borderline,
       pointRadius: 4,
-      backgroundColor: "rgba(234, 179, 8, 0.7)", // amber
-      borderColor: "rgba(234, 179, 8, 1)"
+      backgroundColor: CHART_COLORS.dailyElevatedFill,
+      borderColor: CHART_COLORS.dailyElevatedStroke
     },
     {
       label: highLabel,
       data: high,
       pointRadius: 5,
-      backgroundColor: "rgba(239, 68, 68, 0.75)", // red
-      borderColor: "rgba(239, 68, 68, 1)"
+      backgroundColor: CHART_COLORS.dailyHighFill,
+      borderColor: CHART_COLORS.dailyHighStroke
     }
   ];
 

@@ -13,6 +13,13 @@
 /* [C1] Tokens and base layout */
 :root {
   --maxw: 980px;
+  --bg-page: #f3f6fb;
+  --bg-card: #ffffff;
+  --text-main: #0f172a;
+  --line-soft: rgba(15, 23, 42, 0.12);
+  --line-mid: rgba(15, 23, 42, 0.2);
+  --accent: #0f766e;
+  --accent-hover: #0c5e58;
 }
 
 * { box-sizing: border-box; }
@@ -22,17 +29,17 @@ body {
   padding: 24px;
   font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
   line-height: 1.35;
-  background: #f6f7fb;
-  color: #111;
+  background: linear-gradient(180deg, #f7f9fc 0%, var(--bg-page) 100%);
+  color: var(--text-main);
 }
 
 .container {
   max-width: var(--maxw);
   margin: 0 auto;
-  background: #fff;
+  background: var(--bg-card);
   border-radius: 16px;
   padding: 18px 18px 26px;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
 }
 
 h1 {
@@ -90,12 +97,12 @@ h2 {
 /* [C3] Controls and helpers */
 .controls {
   display: grid;
-  gap: 10px;
+  gap: 12px;
   margin: 10px 0 8px;
-  padding: 10px 12px;
-  border: 1px solid rgba(0,0,0,0.07);
+  padding: 12px;
+  border: 1px solid var(--line-soft);
   border-radius: 12px;
-  background: rgba(255,255,255,0.8);
+  background: rgba(255,255,255,0.92);
 }
 
 .controlsRow {
@@ -134,15 +141,15 @@ h2 {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  flex: 0 0 16px;
-  width: 16px;
-  height: 16px;
-  border: 1px solid rgba(0,0,0,0.25);
+  flex: 0 0 15px;
+  width: 15px;
+  height: 15px;
+  border: 1px solid var(--line-mid);
   border-radius: 50%;
-  background: #fff;
-  color: rgba(0,0,0,0.75);
-  font-size: 11px;
-  line-height: 16px;
+  background: #fcfcfd;
+  color: rgba(15,23,42,0.72);
+  font-size: 10px;
+  line-height: 15px;
   padding: 0;
   cursor: help;
   vertical-align: middle;
@@ -184,7 +191,7 @@ h2 {
 }
 
 .controls button{
-  border: 1px solid rgba(0,0,0,0.12);
+  border: 1px solid var(--line-soft);
   background: #fff;
   border-radius: 10px;
 }
@@ -209,11 +216,11 @@ h2 {
   gap: 5px;
 }
 .controls select{
-  border: 1px solid rgba(0,0,0,0.12);
+  border: 1px solid var(--line-soft);
   border-radius: 10px;
   background: #fff;
 }
-.controls button:hover{ background: rgba(0,0,0,0.03); }
+.controls button:hover{ background: rgba(15,23,42,0.03); }
 
 .controls label {
   font-size: 14px;
@@ -238,6 +245,25 @@ h2 {
 
 #station {
   width: 100%;
+}
+
+.controls select:focus,
+.controls input:focus,
+.controls button:focus {
+  outline: 2px solid rgba(15, 118, 110, 0.25);
+  outline-offset: 1px;
+  border-color: rgba(15, 118, 110, 0.55);
+}
+
+#loadBtn {
+  background: var(--accent);
+  color: #fff;
+  border-color: transparent;
+  font-weight: 600;
+}
+
+#loadBtn:hover {
+  background: var(--accent-hover);
 }
 
 /* [C4] Status and advanced diagnostics */
