@@ -259,9 +259,10 @@ function clearVisuals() {
     dailyScatterChart = null;
   }
 
-  setKpi("kpiCurrent", "â€”");
-  setKpi("kpiAbove25", "â€”");
-  setKpi("kpiCorr", "â€”");
+  setKpi("kpiCurrent", "—");
+  setKpi("kpiAbove25", "—");
+  setKpi("kpiCorr", "—");
+  setKpi("kpiCurrentLabel", "Latest hourly reading");
 
   const currentEl = document.getElementById("kpiCurrent");
   if (currentEl) currentEl.classList.remove("kpiGood", "kpiElevated", "kpiHigh");
@@ -351,6 +352,23 @@ function toDayKey(ts) {
   } catch (e) {
     // Fallback to naive string slice
     return String(ts).slice(0, 10);
+  }
+}
+
+function formatLocalTimeWithZone(ts) {
+  const d = new Date(ts);
+  if (!Number.isFinite(d.getTime())) return null;
+  try {
+    return new Intl.DateTimeFormat(undefined, {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+      timeZoneName: "short"
+    }).format(d);
+  } catch {
+    const hh = String(d.getHours()).padStart(2, "0");
+    const mm = String(d.getMinutes()).padStart(2, "0");
+    return `${hh}:${mm}`;
   }
 }
 
@@ -474,14 +492,9 @@ function renderDailyMetricWindScatter(rows, weatherHourly, metric, weatherMetric
       const val = getRowNumericValue(latest);
       const unit = unitForMetric(metric);
       const ts = getRowTimestamp(latest);
-      let timeOnly = "";
-      if (ts) {
-        const d = new Date(ts);
-        const hh = String(d.getHours()).padStart(2, '0');
-        const mm = String(d.getMinutes()).padStart(2, '0');
-        timeOnly = `${hh}:${mm}`;
-      }
-      setKpi("kpiCurrent", `${val.toFixed(1)} ${unit}${timeOnly ? ` @ ${timeOnly}` : ""}`);
+      const localTime = ts ? formatLocalTimeWithZone(ts) : null;
+      setKpi("kpiCurrent", `${val.toFixed(1)} ${unit}`);
+      setKpi("kpiCurrentLabel", localTime ? `Latest hourly reading • ${localTime}` : "Latest hourly reading");
 
       // Apply health class based on WHO daily thresholds
       const daily = whoDailyLimit(metric);
@@ -496,9 +509,11 @@ function renderDailyMetricWindScatter(rows, weatherHourly, metric, weatherMetric
       }
     } else {
       setKpi("kpiCurrent", "—");
+      setKpi("kpiCurrentLabel", "Latest hourly reading");
     }
   } catch (e) {
     setKpi("kpiCurrent", "—");
+    setKpi("kpiCurrentLabel", "Latest hourly reading");
   }
 
   // `points` already contains daily joined values sorted by weather
@@ -577,6 +592,7 @@ function renderDailyMetricWindScatter(rows, weatherHourly, metric, weatherMetric
     setKpi("kpiCurrent", "—");
     setKpi("kpiAbove25", "—");
     setKpi("kpiCorr", "—");
+    setKpi("kpiCurrentLabel", "Latest hourly reading");
 
     console.warn(`No daily overlap between ${formatMetricLabel(metric)} and wind.`);
     try {

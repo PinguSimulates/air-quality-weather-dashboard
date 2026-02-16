@@ -14,7 +14,7 @@
         <h1 id="pageTitle">Air Quality Dashboard</h1>
 
         <p class="subtitle">
-        Live pollutant (Luchtmeetnet) + wind (Open-Meteo). Explore dispersion patterns by hour and by day.
+        Live air quality (Luchtmeetnet) + weather (Open-Meteo). Explore pollutant-weather relationships by hour and day.
         </p>
 
         <section class="controls">
@@ -30,7 +30,7 @@
                 </label>
 
                 <label class="controlField">
-                <span>Metric:</span>
+                <span>Pollutant:</span>
                 <select id="metric">
                     <option value="NO2" selected>NO2</option>
                     <option value="O3">O3</option>
@@ -120,12 +120,12 @@
 
         <pre id="status">Ready.</pre>
 
-        <h2 class="insightsTitle">Key insights (daily averages)</h2>
+        <h2 class="insightsTitle">Key insights</h2>
 
         <section id="insights" class="insights">
             <div class="insight">
                 <div class="kpi" id="kpiCurrent">—</div>
-                <div class="kpiLabel">Latest reading</div>
+                <div class="kpiLabel" id="kpiCurrentLabel">Latest hourly reading</div>
             </div>
             <div class="insight">
                 <div class="kpi" id="kpiAbove25">—</div>
